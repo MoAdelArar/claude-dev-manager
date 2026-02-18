@@ -19,6 +19,7 @@ import { ProjectContext } from './orchestrator/context';
 import { PipelineOrchestrator, type PipelineOptions, type PipelineResult } from './orchestrator/pipeline';
 import { ClaudeCodeBridge, type ExecutionMode } from './orchestrator/claude-code-bridge';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
+import { DevelopmentTracker } from './tracker/development-tracker';
 
 // Read version from package.json at build time (resolved relative to dist/)
  
@@ -568,6 +569,81 @@ program
       console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
       process.exit(1);
     }
+  });
+
+// ─── cdm history ────────────────────────────────────────────────────────────
+
+program
+  .command('history')
+  .description('Show the development history timeline and metrics')
+  .option('--project <path>', 'Project path', process.cwd())
+  .option('--feature <id>', 'Filter by feature ID')
+  .option('-n, --last <count>', 'Show only the last N events')
+  .option('--export', 'Export history to .cdm/history/ as markdown and JSON', false)
+  .action((opts: any) => {
+    const projectPath = opts.project;
+    const context = new ProjectContext(projectPath);
+    const project = context.getProject();
+    const tracker = new DevelopmentTracker(projectPath, project.id, project.name);
+
+    const events = opts.feature
+      ? tracker.getEventsForFeature(opts.feature)
+      : tracker.getEvents();
+
+    if (events.length === 0) {
+      console.log(chalk.yellow('\nNo development history found. Run `cdm start` to generate events.\n'));
+      return;
+    }
+
+    if (opts.export) {
+      const { markdownPath, jsonPath } = tracker.saveHistory();
+      console.log(chalk.green(`\n✅ History exported:`));
+      console.log(chalk.white(`  Markdown: ${markdownPath}`));
+      console.log(chalk.white(`  JSON:     ${jsonPath}`));
+      console.log(chalk.white(`  Events:   ${events.length}\n`));
+      return;
+    }
+
+    const summary = tracker.buildSummary();
+
+    console.log(chalk.bold.cyan(`\n📜 Development History: ${project.name}\n`));
+
+    console.log(chalk.bold('Summary:'));
+    console.log(`  Features:     ${summary.totalFeatures} (${chalk.green(String(summary.completedFeatures))} completed, ${chalk.red(String(summary.failedFeatures))} failed)`);
+    console.log(`  Stages run:   ${summary.totalStagesExecuted}`);
+    console.log(`  Artifacts:    ${summary.totalArtifactsProduced}`);
+    console.log(`  Issues:       ${summary.totalIssuesFound} found, ${summary.totalIssuesResolved} resolved`);
+    console.log(`  Tokens:       ${summary.totalTokensUsed.toLocaleString()}`);
+    console.log(`  Duration:     ${(summary.totalDurationMs / 1000).toFixed(1)}s`);
+
+    if (Object.keys(summary.agentActivity).length > 0) {
+      console.log(chalk.bold('\nAgent Activity:'));
+      for (const [role, data] of Object.entries(summary.agentActivity)) {
+        const name = formatAgentName(role as AgentRole);
+        console.log(`  ${name}: ${data.tasks} tasks, ${data.tokensUsed.toLocaleString()} tokens, ${(data.durationMs / 1000).toFixed(1)}s`);
+      }
+    }
+
+    const displayEvents = opts.last
+      ? events.slice(-parseInt(opts.last, 10))
+      : events.slice(-30);
+
+    console.log(chalk.bold(`\nTimeline (last ${displayEvents.length} events):\n`));
+    for (const event of displayEvents) {
+      const time = new Date(event.timestamp).toLocaleTimeString();
+      const tokenStr = event.tokensUsed ? chalk.gray(` (${event.tokensUsed.toLocaleString()} tok)`) : '';
+      const durStr = event.durationMs ? chalk.gray(` [${(event.durationMs / 1000).toFixed(1)}s]`) : '';
+      const typeColor = event.type.includes('failed') ? chalk.red :
+        event.type.includes('completed') ? chalk.green :
+        event.type.includes('skipped') ? chalk.yellow : chalk.white;
+      console.log(`  ${chalk.gray(time)} ${typeColor(event.message)}${tokenStr}${durStr}`);
+    }
+
+    if (events.length > displayEvents.length) {
+      console.log(chalk.gray(`\n  ... ${events.length - displayEvents.length} earlier events (use --last <n> to see more)`));
+    }
+
+    console.log(chalk.gray(`\n  Use --export to save full history as markdown and JSON.\n`));
   });
 
 // ─── cdm pipeline ────────────────────────────────────────────────────────────

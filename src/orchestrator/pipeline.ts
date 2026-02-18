@@ -25,6 +25,7 @@ import { TransitionEngine, TransitionResult } from '../pipeline/transitions';
 import { getStageConfig, getAllStageConfigs, getStagesInOrder, getNextStage } from '../pipeline/stages';
 import { type ProjectContext } from './context';
 import { ClaudeCodeBridge, type ClaudeCodeOptions } from './claude-code-bridge';
+import { DevelopmentTracker } from '../tracker/development-tracker';
 import { pipelineLog, stageLog, agentLog } from '../utils/logger';
 import { type CDMConfig } from '../utils/config';
 
@@ -63,6 +64,7 @@ export class PipelineOrchestrator {
   private bridge: ClaudeCodeBridge;
   private config: CDMConfig;
   private projectAnalysis: string | null = null;
+  private tracker: DevelopmentTracker;
 
   constructor(
     projectContext: ProjectContext,
@@ -79,11 +81,13 @@ export class PipelineOrchestrator {
     this.handoffProtocol = new HandoffProtocol(this.messageBus);
     this.transitionEngine = new TransitionEngine(artifactStore);
 
+    const project = projectContext.getProject();
     this.bridge = new ClaudeCodeBridge(this.agentRegistry, this.artifactStore, {
-      projectPath: projectContext.getProject().rootPath,
+      projectPath: project.rootPath,
       ...bridgeOptions,
     });
 
+    this.tracker = new DevelopmentTracker(project.rootPath, project.id, project.name);
     this.projectAnalysis = this.loadProjectAnalysis();
   }
 
@@ -108,6 +112,8 @@ export class PipelineOrchestrator {
     pipelineLog(`Starting pipeline for feature: ${feature.name}`);
     pipelineLog(`Execution mode: ${this.bridge.getExecutionMode()} (Claude CLI ${this.bridge.isClaudeAvailable() ? 'available' : 'not found — using simulation'})`);
 
+    this.tracker.recordPipelineStarted(feature.id, feature.name, this.bridge.getExecutionMode());
+
     this.projectContext.updateFeature(feature.id, {
       status: FeatureStatus.IN_PROGRESS,
     });
@@ -130,6 +136,7 @@ export class PipelineOrchestrator {
       if (options.skipStages.includes(stage)) {
         if (this.transitionEngine.canSkipStage(stage)) {
           stageLog(stage, 'Skipping stage (user request)');
+          this.tracker.recordStageSkipped(feature.id, stage, 'user request');
           result.stagesSkipped.push(stage);
           continue;
         } else {
@@ -146,12 +153,14 @@ export class PipelineOrchestrator {
 
       if (!this.isAgentEnabled(stageConfig.primaryAgent)) {
         stageLog(stage, `Primary agent ${stageConfig.primaryAgent} is disabled, skipping`);
+        this.tracker.recordStageSkipped(feature.id, stage, `agent ${stageConfig.primaryAgent} disabled`);
         result.stagesSkipped.push(stage);
         continue;
       }
 
       options.onStageStart?.(stage);
       stageLog(stage, `Starting stage: ${stageConfig.name}`);
+      this.tracker.recordStageStarted(feature.id, stage, stageConfig.primaryAgent);
 
       this.projectContext.updateFeatureStage(feature.id, stage);
 
@@ -174,6 +183,7 @@ export class PipelineOrchestrator {
             retryCount++;
             if (retryCount <= maxRetries) {
               stageLog(stage, `Revision needed, retry ${retryCount}/${maxRetries}`);
+              this.tracker.recordStageRetried(feature.id, stage, retryCount, maxRetries);
             }
           } else {
             break;
@@ -183,6 +193,7 @@ export class PipelineOrchestrator {
           const err = error instanceof Error ? error : new Error(String(error));
           options.onError?.(stage, err);
           stageLog(stage, `Error: ${err.message}, retry ${retryCount}/${maxRetries}`, 'error');
+          this.tracker.recordStageFailed(feature.id, stage, err.message);
 
           if (retryCount > maxRetries) {
             stageResult = this.createFailedStageResult(stage, err);
@@ -202,6 +213,15 @@ export class PipelineOrchestrator {
       result.artifacts.push(...stageResult.artifacts);
       result.issues.push(...stageResult.issues);
 
+      this.tracker.recordStageCompleted(feature.id, stage, stageResult);
+
+      for (const artifact of stageResult.artifacts) {
+        this.tracker.recordArtifactProduced(feature.id, stage, artifact.name, artifact.type, artifact.createdBy);
+      }
+      for (const issue of stageResult.issues) {
+        this.tracker.recordIssueFound(feature.id, stage, issue.title, issue.severity, issue.reportedBy);
+      }
+
       options.onStageComplete?.(stage, stageResult);
 
       if (stageResult.status === StageStatus.APPROVED || stageResult.status === StageStatus.SKIPPED) {
@@ -219,14 +239,17 @@ export class PipelineOrchestrator {
 
     if (result.success) {
       this.projectContext.completeFeature(feature.id);
+      this.tracker.recordPipelineCompleted(feature.id, feature.name, result.totalDurationMs, result.totalTokensUsed, result.artifacts.length, result.issues.length);
       pipelineLog(`Pipeline completed successfully for feature: ${feature.name}`);
     } else {
       this.projectContext.updateFeature(feature.id, {
         status: FeatureStatus.ON_HOLD,
       });
+      this.tracker.recordPipelineFailed(feature.id, feature.name, result.stagesFailed[0]!);
       pipelineLog(`Pipeline failed at stage(s): ${result.stagesFailed.join(', ')}`);
     }
 
+    this.tracker.saveHistory();
     return result;
   }
 
@@ -247,6 +270,7 @@ export class PipelineOrchestrator {
     agentLog(stageConfig.primaryAgent, `Executing primary work for ${stageConfig.name}`, stage);
 
     const primaryResult = await this.bridge.executeAgentTask(task);
+    this.tracker.recordAgentTask(feature.id, stage, stageConfig.primaryAgent, task.title, primaryResult);
 
     const allArtifacts = [...primaryResult.artifacts];
     const allIssues = [...primaryResult.issues];
@@ -264,6 +288,7 @@ export class PipelineOrchestrator {
       agentLog(supportRole, `Executing supporting work for ${stageConfig.name}`, stage);
 
       const supportResult = await this.bridge.executeAgentTask(supportTask);
+      this.tracker.recordAgentTask(feature.id, stage, supportRole, supportTask.title, supportResult);
       allArtifacts.push(...supportResult.artifacts);
       allIssues.push(...supportResult.issues);
       totalTokens += supportResult.tokensUsed;
@@ -284,6 +309,7 @@ export class PipelineOrchestrator {
       agentLog(reviewerRole, `Reviewing work for ${stageConfig.name}`, stage);
 
       const reviewResult = await this.bridge.executeAgentTask(reviewTask);
+      this.tracker.recordAgentTask(feature.id, stage, reviewerRole, reviewTask.title, reviewResult);
       allIssues.push(...reviewResult.issues);
       totalTokens += reviewResult.tokensUsed;
 
@@ -503,6 +529,10 @@ If the work meets standards, approve it. If changes are needed, detail what must
 
   getBridge(): ClaudeCodeBridge {
     return this.bridge;
+  }
+
+  getTracker(): DevelopmentTracker {
+    return this.tracker;
   }
 
   getAgentRegistry(): AgentRegistry {

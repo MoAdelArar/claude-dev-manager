@@ -174,6 +174,7 @@ export enum ArtifactType {
   DISASTER_RECOVERY_PLAN = 'disaster_recovery_plan',
   PERFORMANCE_BENCHMARK = 'performance_benchmark',
   RUNBOOK = 'runbook',
+  DEVELOPMENT_HISTORY = 'development_history',
 }
 
 export interface Artifact {
@@ -397,6 +398,66 @@ export interface AgentTask {
   startedAt?: Date;
   completedAt?: Date;
   result?: AgentResult;
+}
+
+// ─── Development Tracking ────────────────────────────────────────────────────
+
+export enum TrackingEventType {
+  FEATURE_CREATED = 'feature_created',
+  PIPELINE_STARTED = 'pipeline_started',
+  PIPELINE_COMPLETED = 'pipeline_completed',
+  PIPELINE_FAILED = 'pipeline_failed',
+  STAGE_STARTED = 'stage_started',
+  STAGE_COMPLETED = 'stage_completed',
+  STAGE_FAILED = 'stage_failed',
+  STAGE_SKIPPED = 'stage_skipped',
+  STAGE_RETRIED = 'stage_retried',
+  AGENT_TASK_STARTED = 'agent_task_started',
+  AGENT_TASK_COMPLETED = 'agent_task_completed',
+  AGENT_TASK_FAILED = 'agent_task_failed',
+  ARTIFACT_PRODUCED = 'artifact_produced',
+  ISSUE_FOUND = 'issue_found',
+  ISSUE_RESOLVED = 'issue_resolved',
+  GATE_EVALUATED = 'gate_evaluated',
+  HANDOFF_COMPLETED = 'handoff_completed',
+  CONFIG_CHANGED = 'config_changed',
+  ANALYSIS_GENERATED = 'analysis_generated',
+}
+
+export interface TrackingEvent {
+  id: string;
+  timestamp: Date;
+  type: TrackingEventType;
+  featureId?: string;
+  featureName?: string;
+  stage?: PipelineStage;
+  agentRole?: AgentRole;
+  message: string;
+  details: Record<string, unknown>;
+  durationMs?: number;
+  tokensUsed?: number;
+}
+
+export interface DevelopmentHistory {
+  projectId: string;
+  projectName: string;
+  generatedAt: string;
+  events: TrackingEvent[];
+  summary: HistorySummary;
+}
+
+export interface HistorySummary {
+  totalFeatures: number;
+  completedFeatures: number;
+  failedFeatures: number;
+  totalStagesExecuted: number;
+  totalArtifactsProduced: number;
+  totalIssuesFound: number;
+  totalIssuesResolved: number;
+  totalTokensUsed: number;
+  totalDurationMs: number;
+  agentActivity: Record<string, { tasks: number; tokensUsed: number; durationMs: number }>;
+  stageMetrics: Record<string, { runs: number; avgDurationMs: number; avgTokens: number; failureRate: number }>;
 }
 
 // ─── CLI Types ───────────────────────────────────────────────────────────────
