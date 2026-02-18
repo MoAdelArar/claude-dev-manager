@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import * as path from 'path';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -11,14 +12,42 @@ import {
   AgentRole,
 } from './types';
 import { loadConfig, saveConfig, getDefaultConfig, CDMConfig } from './utils/config';
-import { addFileTransport, pipelineLog } from './utils/logger';
+import logger, { addFileTransport, pipelineLog } from './utils/logger';
 import { ArtifactStore } from './workspace/artifact-store';
 import { ProjectContext } from './orchestrator/context';
 import { PipelineOrchestrator, PipelineOptions, PipelineResult } from './orchestrator/pipeline';
 import { ClaudeCodeBridge, ExecutionMode } from './orchestrator/claude-code-bridge';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 
-const VERSION = '1.0.0';
+// Read version from package.json at build time (resolved relative to dist/)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version: VERSION } = require(path.join(__dirname, '..', 'package.json'));
+
+// ─── Global error handlers ───────────────────────────────────────────────────
+
+process.on('uncaughtException', (error) => {
+  logger.error(`Uncaught exception: ${error.message}`);
+  if (error.stack) logger.error(error.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  logger.error(`Unhandled rejection: ${message}`);
+  process.exit(1);
+});
+
+process.on('SIGINT', () => {
+  console.log(chalk.yellow('\n\nInterrupted. Exiting gracefully...'));
+  process.exit(130);
+});
+
+process.on('SIGTERM', () => {
+  logger.info('Received SIGTERM. Shutting down...');
+  process.exit(0);
+});
+
+// ─── CLI Setup ───────────────────────────────────────────────────────────────
 
 const program = new Command();
 

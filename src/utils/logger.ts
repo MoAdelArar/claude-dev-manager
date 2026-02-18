@@ -53,11 +53,20 @@ const logger = winston.createLogger({
   ],
 });
 
-export function addFileTransport(logDir: string): void {
+export function addFileTransport(projectPath: string): void {
+  const fs = require('fs');
+  const path = require('path');
+  const logDir = path.join(projectPath, '.cdm', 'logs');
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+
   logger.add(
     new winston.transports.File({
-      filename: `${logDir}/cdm-error.log`,
+      filename: path.join(logDir, 'cdm-error.log'),
       level: 'error',
+      maxsize: 5 * 1024 * 1024,
+      maxFiles: 3,
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.json(),
@@ -66,7 +75,9 @@ export function addFileTransport(logDir: string): void {
   );
   logger.add(
     new winston.transports.File({
-      filename: `${logDir}/cdm-combined.log`,
+      filename: path.join(logDir, 'cdm-combined.log'),
+      maxsize: 10 * 1024 * 1024,
+      maxFiles: 5,
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.json(),

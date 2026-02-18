@@ -1,11 +1,18 @@
 {
   "name": "claude-dev-manager",
   "version": "1.0.0",
-  "description": "Enterprise-grade multi-agent development management system powered by Claude Code",
+  "description": "Multi-agent development management system powered by Claude Code",
   "main": "dist/cli.js",
+  "types": "dist/types.d.ts",
   "bin": {
     "cdm": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
@@ -14,21 +21,32 @@
     "test:unit": "jest --testPathPattern=tests/unit",
     "test:integration": "jest --testPathPattern=tests/integration",
     "test:e2e": "jest --testPathPattern=tests/e2e --testTimeout=120000",
-    "lint": "eslint src/ --ext .ts",
-    "lint:fix": "eslint src/ --ext .ts --fix",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run typecheck",
+    "prepublishOnly": "npm run lint && npm test && npm run build"
   },
   "keywords": [
     "claude",
+    "claude-code",
     "ai",
     "development",
     "project-management",
     "multi-agent",
-    "software-engineering"
+    "software-engineering",
+    "devops",
+    "aws",
+    "gcp",
+    "azure"
   ],
-  "author": "",
+  "author": "MoAdelArar",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MoAdelArar/claude-dev-manager.git"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "chalk": "^4.1.2",
