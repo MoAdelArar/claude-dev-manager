@@ -17,6 +17,7 @@ import {
 import { agentLog } from '../utils/logger';
 import { validateArtifact } from '../utils/validators';
 import { type ArtifactStore } from '../workspace/artifact-store';
+import { optimizeInputArtifacts, estimateTokens } from '../context/context-optimizer';
 
 export abstract class BaseAgent {
   protected config: AgentConfig;
@@ -130,15 +131,8 @@ export abstract class BaseAgent {
     }
 
     if (task.inputArtifacts.length > 0) {
-      const artifactsList = task.inputArtifacts
-        .map((a) => `- **${a.name}** (${a.type}): ${a.description}`)
-        .join('\n');
-      sections.push(`## Input Artifacts\n${artifactsList}`);
-
-      const artifactContents = task.inputArtifacts
-        .map((a) => `### ${a.name}\n\`\`\`\n${a.content}\n\`\`\``)
-        .join('\n\n');
-      sections.push(`## Artifact Contents\n${artifactContents}`);
+      const optimized = optimizeInputArtifacts(task.inputArtifacts, task.assignedTo);
+      sections.push(`## Input Artifacts (${task.inputArtifacts.length})\n${optimized}`);
     }
 
     if (task.expectedOutputs.length > 0) {
@@ -153,7 +147,11 @@ export abstract class BaseAgent {
 
     sections.push(this.getOutputFormatInstructions());
 
-    return sections.join('\n\n');
+    const prompt = sections.join('\n\n');
+    const tokens = estimateTokens(prompt);
+    agentLog(this.role, `Prompt: ~${tokens.toLocaleString()} tokens`, task.stage);
+
+    return prompt;
   }
 
   protected getOutputFormatInstructions(): string {

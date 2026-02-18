@@ -26,6 +26,7 @@ import { getStageConfig, getAllStageConfigs, getStagesInOrder, getNextStage } fr
 import { type ProjectContext } from './context';
 import { ClaudeCodeBridge, type ClaudeCodeOptions } from './claude-code-bridge';
 import { DevelopmentTracker } from '../tracker/development-tracker';
+import { optimizeAnalysisForRole, optimizeProfileForRole } from '../context/context-optimizer';
 import { pipelineLog, stageLog, agentLog } from '../utils/logger';
 import { type CDMConfig } from '../utils/config';
 
@@ -52,6 +53,7 @@ export interface PipelineResult {
   artifacts: Artifact[];
   issues: Issue[];
   executionMode: string;
+  contextOptimized: boolean;
 }
 
 export class PipelineOrchestrator {
@@ -109,10 +111,14 @@ export class PipelineOrchestrator {
       artifacts: [],
       issues: [],
       executionMode: this.bridge.getExecutionMode(),
+      contextOptimized: this.projectAnalysis !== null || this.codeStyleProfile !== null,
     };
 
     pipelineLog(`Starting pipeline for feature: ${feature.name}`);
     pipelineLog(`Execution mode: ${this.bridge.getExecutionMode()} (Claude CLI ${this.bridge.isClaudeAvailable() ? 'available' : 'not found — using simulation'})`);
+    if (result.contextOptimized) {
+      pipelineLog('Context optimization: ON (role-aware filtering + artifact summarization)');
+    }
 
     this.tracker.recordPipelineStarted(feature.id, feature.name, this.bridge.getExecutionMode());
 
@@ -451,15 +457,17 @@ If the work meets standards, approve it. If changes are needed, detail what must
       instructions.push(`\nCustom instructions: ${project.config.customInstructions}`);
     }
 
-    if (this.projectAnalysis) {
-      instructions.push(`\n--- PROJECT ANALYSIS (use this as your primary reference for the codebase) ---\n`);
-      instructions.push(this.projectAnalysis);
+    const filteredAnalysis = optimizeAnalysisForRole(this.projectAnalysis, agentRole);
+    if (filteredAnalysis) {
+      instructions.push(`\n--- PROJECT ANALYSIS (filtered for your role) ---\n`);
+      instructions.push(filteredAnalysis);
       instructions.push(`\n--- END PROJECT ANALYSIS ---`);
     }
 
-    if (this.codeStyleProfile) {
+    const filteredProfile = optimizeProfileForRole(this.codeStyleProfile, agentRole);
+    if (filteredProfile) {
       instructions.push(`\n--- CODE STYLE PROFILE (you MUST follow these conventions) ---\n`);
-      instructions.push(this.codeStyleProfile);
+      instructions.push(filteredProfile);
       instructions.push(`\n--- END CODE STYLE PROFILE ---`);
     }
 

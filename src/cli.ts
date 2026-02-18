@@ -839,6 +839,7 @@ function printPipelineResult(result: PipelineResult): void {
 
   console.log(chalk.bold('Summary:'));
   console.log(`  Execution mode:   ${chalk.cyan(result.executionMode)}`);
+  console.log(`  Context optimized: ${result.contextOptimized ? chalk.green('yes (role-aware filtering)') : chalk.gray('no (run cdm analyze first)')}`);
   console.log(`  Stages completed: ${chalk.green(String(result.stagesCompleted.length))}`);
   console.log(`  Stages failed:    ${chalk.red(String(result.stagesFailed.length))}`);
   console.log(`  Stages skipped:   ${chalk.yellow(String(result.stagesSkipped.length))}`);
