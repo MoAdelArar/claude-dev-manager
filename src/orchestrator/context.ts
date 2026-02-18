@@ -10,6 +10,7 @@ import {
   PipelineStage,
   StageResult,
   StageStatus,
+  CloudProvider,
 } from '../types';
 import logger from '../utils/logger';
 
@@ -145,6 +146,7 @@ export class ProjectContext {
       buildTool: 'npm',
       ciProvider: 'github-actions',
       deployTarget: 'docker',
+      cloudProvider: CloudProvider.AWS,
       codeStyle: 'standard',
       branchStrategy: 'gitflow',
       customInstructions: '',
@@ -176,8 +178,29 @@ export class ProjectContext {
         if (deps.jest) config.testFramework = 'jest';
         else if (deps.vitest) config.testFramework = 'vitest';
         else if (deps.mocha) config.testFramework = 'mocha';
+
+        if (deps['@aws-sdk/client-s3'] || deps['aws-sdk'] || deps['@aws-cdk/core']) config.cloudProvider = CloudProvider.AWS;
+        else if (deps['@google-cloud/storage'] || deps['@google-cloud/pubsub'] || deps['firebase-admin']) config.cloudProvider = CloudProvider.GCP;
+        else if (deps['@azure/storage-blob'] || deps['@azure/identity'] || deps['@azure/cosmos']) config.cloudProvider = CloudProvider.AZURE;
       } catch {
         // package.json parse failed, use defaults
+      }
+    }
+
+    const cloudIndicators: [string, CloudProvider][] = [
+      ['serverless.yml', CloudProvider.AWS],
+      ['samconfig.toml', CloudProvider.AWS],
+      ['cdk.json', CloudProvider.AWS],
+      ['app.yaml', CloudProvider.GCP],
+      ['.gcloudignore', CloudProvider.GCP],
+      ['firebase.json', CloudProvider.GCP],
+      ['azure-pipelines.yml', CloudProvider.AZURE],
+      ['host.json', CloudProvider.AZURE],
+    ];
+    for (const [file, provider] of cloudIndicators) {
+      if (fs.existsSync(path.join(projectPath, file))) {
+        config.cloudProvider = provider;
+        break;
       }
     }
 

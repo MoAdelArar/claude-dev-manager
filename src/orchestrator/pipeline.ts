@@ -417,6 +417,7 @@ If the work meets standards, approve it. If changes are needed, detail what must
     instructions.push(`- Framework: ${project.config.framework}`);
     instructions.push(`- Test framework: ${project.config.testFramework}`);
     instructions.push(`- Build tool: ${project.config.buildTool}`);
+    instructions.push(`- Cloud provider: ${project.config.cloudProvider}`);
 
     if (project.config.customInstructions) {
       instructions.push(`\nCustom instructions: ${project.config.customInstructions}`);

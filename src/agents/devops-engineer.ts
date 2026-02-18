@@ -8,10 +8,12 @@ import {
   IssueType,
   IssueSeverity,
   PipelineStage,
+  CloudProvider,
 } from '../types';
 import { BaseAgent } from './base-agent';
 import { ArtifactStore } from '../workspace/artifact-store';
 import { agentLog } from '../utils/logger';
+import { getCloudProvider, NFRContext } from '../cloud/index';
 
 interface ParsedArtifact {
   type: string;
@@ -148,6 +150,14 @@ export const DEVOPS_ENGINEER_CONFIG: AgentConfig = {
     ArtifactType.DEPLOYMENT_PLAN,
     ArtifactType.INFRASTRUCTURE_CONFIG,
     ArtifactType.CI_CD_CONFIG,
+    ArtifactType.MONITORING_CONFIG,
+    ArtifactType.ALERTING_RULES,
+    ArtifactType.SCALING_POLICY,
+    ArtifactType.COST_ANALYSIS,
+    ArtifactType.SLA_DEFINITION,
+    ArtifactType.DISASTER_RECOVERY_PLAN,
+    ArtifactType.PERFORMANCE_BENCHMARK,
+    ArtifactType.RUNBOOK,
   ],
 };
 
@@ -165,7 +175,10 @@ export default class DevOpsEngineerAgent extends BaseAgent {
     const sourceCode = task.inputArtifacts.filter((a) => a.type === ArtifactType.SOURCE_CODE);
     const secReport = task.inputArtifacts.find((a) => a.type === ArtifactType.SECURITY_REPORT);
 
+    const cloudProvider = this.detectCloudProvider(task);
+
     sections.push('# Deployment & Infrastructure Plan\n');
+    sections.push(`**Cloud Provider:** ${cloudProvider}\n`);
 
     sections.push('## 1. CI/CD Pipeline Configuration\n');
     sections.push(this.generateCICDConfig(archDoc, sourceCode));
@@ -189,6 +202,31 @@ export default class DevOpsEngineerAgent extends BaseAgent {
 
     sections.push('\n## 7. Rollback Procedures\n');
     sections.push(this.generateRollbackPlan());
+
+    const nfrCtx = this.buildNFRContext(task);
+    const provider = getCloudProvider(cloudProvider);
+    if (provider) {
+      const nfr = provider.generateNFRArtifacts(nfrCtx);
+      sections.push('\n## 8. Monitoring Configuration (Cloud-Specific)\n');
+      sections.push(nfr.monitoringConfig);
+      sections.push('\n## 9. Alerting Rules (Cloud-Specific)\n');
+      sections.push(nfr.alertingRules);
+      sections.push('\n## 10. Scaling Policy\n');
+      sections.push(nfr.scalingPolicy);
+      sections.push('\n## 11. Cost Analysis\n');
+      sections.push(nfr.costAnalysis);
+      sections.push('\n## 12. SLA / SLO / SLI Definitions\n');
+      sections.push(nfr.slaDefinition);
+      sections.push('\n## 13. Disaster Recovery Plan\n');
+      sections.push(nfr.disasterRecoveryPlan);
+      sections.push('\n## 14. Performance Benchmarks\n');
+      sections.push(nfr.performanceBenchmark);
+      sections.push('\n## 15. Operational Runbook\n');
+      sections.push(nfr.runbook);
+      agentLog(this.role, `Generated NFR artifacts for ${cloudProvider.toUpperCase()}`, task.stage);
+    } else {
+      agentLog(this.role, 'No cloud provider set — skipping cloud-specific NFR generation', task.stage);
+    }
 
     const output = sections.join('\n');
     agentLog(this.role, 'Deployment planning complete', task.stage);
@@ -238,6 +276,33 @@ export default class DevOpsEngineerAgent extends BaseAgent {
       artifacts.push(cicd);
     }
 
+    const cloudProvider = this.detectCloudProvider(task);
+    const provider = getCloudProvider(cloudProvider);
+    if (provider) {
+      const nfrCtx = this.buildNFRContext(task);
+      const nfr = provider.generateNFRArtifacts(nfrCtx);
+      const providerLabel = cloudProvider.toUpperCase();
+
+      const nfrArtifactDefs: { type: ArtifactType; name: string; desc: string; content: string; file: string }[] = [
+        { type: ArtifactType.MONITORING_CONFIG, name: `Monitoring Configuration (${providerLabel})`, desc: `Cloud monitoring setup for ${provider.profile.name}`, content: nfr.monitoringConfig, file: 'monitoring-config.md' },
+        { type: ArtifactType.ALERTING_RULES, name: `Alerting Rules (${providerLabel})`, desc: `Alerting policies and escalation for ${provider.profile.name}`, content: nfr.alertingRules, file: 'alerting-rules.md' },
+        { type: ArtifactType.SCALING_POLICY, name: `Scaling Policy (${providerLabel})`, desc: `Auto-scaling configuration for ${provider.profile.name}`, content: nfr.scalingPolicy, file: 'scaling-policy.md' },
+        { type: ArtifactType.COST_ANALYSIS, name: `Cost Analysis (${providerLabel})`, desc: `Cost estimates and optimization for ${provider.profile.name}`, content: nfr.costAnalysis, file: 'cost-analysis.md' },
+        { type: ArtifactType.SLA_DEFINITION, name: `SLA/SLO/SLI Definitions (${providerLabel})`, desc: `Service level objectives for ${provider.profile.name}`, content: nfr.slaDefinition, file: 'sla-definition.md' },
+        { type: ArtifactType.DISASTER_RECOVERY_PLAN, name: `Disaster Recovery Plan (${providerLabel})`, desc: `DR strategy and procedures for ${provider.profile.name}`, content: nfr.disasterRecoveryPlan, file: 'disaster-recovery.md' },
+        { type: ArtifactType.PERFORMANCE_BENCHMARK, name: `Performance Benchmarks (${providerLabel})`, desc: `Performance targets and load test config for ${provider.profile.name}`, content: nfr.performanceBenchmark, file: 'performance-benchmarks.md' },
+        { type: ArtifactType.RUNBOOK, name: `Operational Runbook (${providerLabel})`, desc: `Incident response and operational procedures for ${provider.profile.name}`, content: nfr.runbook, file: 'runbook.md' },
+      ];
+
+      for (const def of nfrArtifactDefs) {
+        if (!artifacts.some(a => a.type === def.type)) {
+          const artifact = this.createArtifact(def.type, def.name, def.desc, def.content, `.cdm/deployment/${def.file}`);
+          this.artifactStore.store(artifact);
+          artifacts.push(artifact);
+        }
+      }
+    }
+
     return artifacts;
   }
 
@@ -265,9 +330,41 @@ export default class DevOpsEngineerAgent extends BaseAgent {
       }
       if (!lower.includes('backup') && !lower.includes('disaster recovery')) {
         issues.push(this.createIssue(
-          task.featureId, IssueType.ARCHITECTURE_CONCERN, IssueSeverity.HIGH,
+          task.featureId, IssueType.RELIABILITY, IssueSeverity.HIGH,
           'No disaster recovery plan',
-          'Architecture does not describe backup or disaster recovery procedures.',
+          'Architecture does not describe backup or disaster recovery procedures. Define RPO/RTO targets and a DR strategy.',
+          task.stage,
+        ));
+      }
+      if (!lower.includes('scaling') && !lower.includes('autoscal') && !lower.includes('auto-scal')) {
+        issues.push(this.createIssue(
+          task.featureId, IssueType.SCALABILITY, IssueSeverity.MEDIUM,
+          'No scaling strategy defined',
+          'Architecture does not address horizontal or vertical scaling. Define auto-scaling policies and capacity planning.',
+          task.stage,
+        ));
+      }
+      if (!lower.includes('monitor') && !lower.includes('observ') && !lower.includes('alert')) {
+        issues.push(this.createIssue(
+          task.featureId, IssueType.OBSERVABILITY, IssueSeverity.HIGH,
+          'No monitoring or observability strategy',
+          'Architecture lacks monitoring, logging, tracing, or alerting specifications. Implement the three pillars of observability.',
+          task.stage,
+        ));
+      }
+      if (!lower.includes('cost') && !lower.includes('budget')) {
+        issues.push(this.createIssue(
+          task.featureId, IssueType.COST_OPTIMIZATION, IssueSeverity.LOW,
+          'No cost analysis or budget defined',
+          'No cost estimates, budget alerts, or optimization strategy documented. Establish cost baselines and savings targets.',
+          task.stage,
+        ));
+      }
+      if (!lower.includes('sla') && !lower.includes('slo') && !lower.includes('sli') && !lower.includes('uptime')) {
+        issues.push(this.createIssue(
+          task.featureId, IssueType.RELIABILITY, IssueSeverity.MEDIUM,
+          'No SLA/SLO definitions',
+          'Service level objectives not defined. Establish availability targets, latency budgets, and error rate thresholds.',
           task.stage,
         ));
       }
@@ -504,12 +601,54 @@ CMD ["node", "dist/index.js"]
     };
   }
 
+  private detectCloudProvider(task: AgentTask): CloudProvider {
+    const instructions = (task.instructions ?? '').toLowerCase();
+    const description = (task.description ?? '').toLowerCase();
+    const combined = instructions + ' ' + description;
+
+    if (combined.includes('cloudprovider: aws') || combined.includes('cloud_provider: aws')) return CloudProvider.AWS;
+    if (combined.includes('cloudprovider: gcp') || combined.includes('cloud_provider: gcp')) return CloudProvider.GCP;
+    if (combined.includes('cloudprovider: azure') || combined.includes('cloud_provider: azure')) return CloudProvider.AZURE;
+
+    for (const artifact of task.inputArtifacts) {
+      const content = (artifact.content ?? '').toLowerCase();
+      if (content.includes('aws') || content.includes('amazon') || content.includes('cloudformation') || content.includes('ecs') || content.includes('lambda')) return CloudProvider.AWS;
+      if (content.includes('gcp') || content.includes('google cloud') || content.includes('gke') || content.includes('cloud run')) return CloudProvider.GCP;
+      if (content.includes('azure') || content.includes('aks') || content.includes('bicep') || content.includes('app service')) return CloudProvider.AZURE;
+    }
+
+    return CloudProvider.AWS;
+  }
+
+  private buildNFRContext(task: AgentTask): NFRContext {
+    const instructions = task.instructions ?? '';
+    const langMatch = instructions.match(/Language:\s*(\w+)/);
+    const frameworkMatch = instructions.match(/Framework:\s*(\w+)/);
+    const deployMatch = instructions.match(/deployTarget:\s*(\w+)/i);
+
+    return {
+      projectName: task.title.replace(/^.*for\s+"(.+)"$/, '$1').replace(/"/g, '') || 'project',
+      language: langMatch?.[1] ?? 'typescript',
+      framework: frameworkMatch?.[1] ?? 'node',
+      deployTarget: deployMatch?.[1] ?? 'docker',
+      featureDescription: task.description,
+    };
+  }
+
   private resolveArtifactType(typeStr: string): ArtifactType | null {
     const normalized = typeStr.toLowerCase().replace(/[\s_-]+/g, '_');
     const mapping: Record<string, ArtifactType> = {
       deployment_plan: ArtifactType.DEPLOYMENT_PLAN,
       infrastructure_config: ArtifactType.INFRASTRUCTURE_CONFIG,
       ci_cd_config: ArtifactType.CI_CD_CONFIG,
+      monitoring_config: ArtifactType.MONITORING_CONFIG,
+      alerting_rules: ArtifactType.ALERTING_RULES,
+      scaling_policy: ArtifactType.SCALING_POLICY,
+      cost_analysis: ArtifactType.COST_ANALYSIS,
+      sla_definition: ArtifactType.SLA_DEFINITION,
+      disaster_recovery_plan: ArtifactType.DISASTER_RECOVERY_PLAN,
+      performance_benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
+      runbook: ArtifactType.RUNBOOK,
     };
     return mapping[normalized] ?? null;
   }

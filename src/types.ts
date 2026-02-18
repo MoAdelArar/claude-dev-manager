@@ -126,6 +126,16 @@ export interface StageMetrics {
   issuesResolved: number;
 }
 
+// ─── Cloud Providers ─────────────────────────────────────────────────────────
+
+export enum CloudProvider {
+  AWS = 'aws',
+  GCP = 'gcp',
+  AZURE = 'azure',
+  MULTI_CLOUD = 'multi_cloud',
+  NONE = 'none',
+}
+
 // ─── Artifacts ───────────────────────────────────────────────────────────────
 
 export enum ArtifactType {
@@ -156,6 +166,14 @@ export enum ArtifactType {
   USER_DOCUMENTATION = 'user_documentation',
   DEVELOPER_DOCUMENTATION = 'developer_documentation',
   CHANGELOG = 'changelog',
+  MONITORING_CONFIG = 'monitoring_config',
+  ALERTING_RULES = 'alerting_rules',
+  SCALING_POLICY = 'scaling_policy',
+  COST_ANALYSIS = 'cost_analysis',
+  SLA_DEFINITION = 'sla_definition',
+  DISASTER_RECOVERY_PLAN = 'disaster_recovery_plan',
+  PERFORMANCE_BENCHMARK = 'performance_benchmark',
+  RUNBOOK = 'runbook',
 }
 
 export interface Artifact {
@@ -260,6 +278,7 @@ export interface ProjectConfig {
   buildTool: string;
   ciProvider: string;
   deployTarget: string;
+  cloudProvider: CloudProvider;
   codeStyle: string;
   branchStrategy: string;
   customInstructions: string;
@@ -326,6 +345,10 @@ export enum IssueType {
   DOCUMENTATION_GAP = 'documentation_gap',
   DEPENDENCY_ISSUE = 'dependency_issue',
   ARCHITECTURE_CONCERN = 'architecture_concern',
+  SCALABILITY = 'scalability',
+  OBSERVABILITY = 'observability',
+  COST_OPTIMIZATION = 'cost_optimization',
+  RELIABILITY = 'reliability',
 }
 
 export enum IssueSeverity {

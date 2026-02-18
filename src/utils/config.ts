@@ -6,6 +6,7 @@ import {
   CLIOptions,
   PipelineStage,
   AgentRole,
+  CloudProvider,
 } from '../types';
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
@@ -15,6 +16,7 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   buildTool: 'npm',
   ciProvider: 'github-actions',
   deployTarget: 'docker',
+  cloudProvider: CloudProvider.AWS,
   codeStyle: 'standard',
   branchStrategy: 'gitflow',
   customInstructions: '',

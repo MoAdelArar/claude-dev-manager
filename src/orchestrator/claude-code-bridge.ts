@@ -449,6 +449,21 @@ export class ClaudeCodeBridge {
       user_documentation: ArtifactType.USER_DOCUMENTATION,
       developer_documentation: ArtifactType.DEVELOPER_DOCUMENTATION,
       changelog: ArtifactType.CHANGELOG,
+      monitoring_config: ArtifactType.MONITORING_CONFIG,
+      monitoring: ArtifactType.MONITORING_CONFIG,
+      alerting_rules: ArtifactType.ALERTING_RULES,
+      alerting: ArtifactType.ALERTING_RULES,
+      scaling_policy: ArtifactType.SCALING_POLICY,
+      scaling: ArtifactType.SCALING_POLICY,
+      cost_analysis: ArtifactType.COST_ANALYSIS,
+      cost: ArtifactType.COST_ANALYSIS,
+      sla_definition: ArtifactType.SLA_DEFINITION,
+      sla: ArtifactType.SLA_DEFINITION,
+      disaster_recovery_plan: ArtifactType.DISASTER_RECOVERY_PLAN,
+      disaster_recovery: ArtifactType.DISASTER_RECOVERY_PLAN,
+      performance_benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
+      benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
+      runbook: ArtifactType.RUNBOOK,
     };
     return mapping[normalized] ?? null;
   }
@@ -466,6 +481,10 @@ export class ClaudeCodeBridge {
       documentation_gap: IssueType.DOCUMENTATION_GAP,
       dependency_issue: IssueType.DEPENDENCY_ISSUE,
       architecture_concern: IssueType.ARCHITECTURE_CONCERN,
+      scalability: IssueType.SCALABILITY,
+      observability: IssueType.OBSERVABILITY,
+      cost_optimization: IssueType.COST_OPTIMIZATION,
+      reliability: IssueType.RELIABILITY,
     };
     return mapping[normalized] ?? IssueType.BUG;
   }
