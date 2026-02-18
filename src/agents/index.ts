@@ -1,6 +1,6 @@
-import { AgentRole, AgentConfig } from '../types';
+import { AgentRole, type AgentConfig } from '../types';
 import { BaseAgent } from './base-agent';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 
 import { ProductManagerAgent, productManagerConfig } from './product-manager';
 import { EngineeringManagerAgent, engineeringManagerConfig } from './engineering-manager';

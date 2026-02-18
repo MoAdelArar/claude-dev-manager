@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
-  AgentMessage,
-  AgentRole,
-  MessageType,
+  type AgentMessage,
+  type AgentRole,
+  type MessageType,
   MessagePriority,
 } from '../types';
 import logger from '../utils/logger';

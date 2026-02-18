@@ -1,14 +1,14 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  Project,
-  ProjectConfig,
-  Feature,
+  type Project,
+  type ProjectConfig,
+  type Feature,
   FeatureStatus,
   FeaturePriority,
   PipelineStage,
-  StageResult,
+  type StageResult,
   StageStatus,
   CloudProvider,
 } from '../types';

@@ -1,7 +1,7 @@
-import { execSync, ExecSyncOptions } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { execSync, type ExecSyncOptions } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const CLI_PATH = path.join(PROJECT_ROOT, 'dist', 'cli.js');

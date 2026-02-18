@@ -1,32 +1,32 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  Feature,
+  type Feature,
   PipelineStage,
-  StageResult,
+  type StageResult,
   StageStatus,
   StageMetrics,
-  AgentTask,
-  AgentResult,
+  type AgentTask,
+  type AgentResult,
   AgentStatus,
-  AgentRole,
-  Artifact,
-  Issue,
+  type AgentRole,
+  type Artifact,
+  type Issue,
   MessagePriority,
   MessageType,
   FeatureStatus,
 } from '../types';
 import { AgentRegistry } from '../agents/index';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 import { MessageBus } from '../communication/message-bus';
 import { HandoffProtocol } from '../communication/handoff';
 import { TransitionEngine, TransitionResult } from '../pipeline/transitions';
 import { getStageConfig, getAllStageConfigs, getStagesInOrder, getNextStage } from '../pipeline/stages';
-import { ProjectContext } from './context';
-import { ClaudeCodeBridge, ClaudeCodeOptions } from './claude-code-bridge';
+import { type ProjectContext } from './context';
+import { ClaudeCodeBridge, type ClaudeCodeOptions } from './claude-code-bridge';
 import { pipelineLog, stageLog, agentLog } from '../utils/logger';
-import { CDMConfig } from '../utils/config';
+import { type CDMConfig } from '../utils/config';
 
 export interface PipelineOptions {
   skipStages: PipelineStage[];

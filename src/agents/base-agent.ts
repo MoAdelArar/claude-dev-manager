@@ -1,22 +1,22 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
-  AgentConfig,
-  AgentRole,
-  AgentResult,
+  type AgentConfig,
+  type AgentRole,
+  type AgentResult,
   AgentStatus,
-  AgentTask,
-  Artifact,
-  ArtifactType,
+  type AgentTask,
+  type Artifact,
+  type ArtifactType,
   ArtifactStatus,
   ReviewStatus,
-  Issue,
-  PipelineStage,
-  HandoffPayload,
+  type Issue,
+  type PipelineStage,
+  type HandoffPayload,
   MessagePriority,
 } from '../types';
 import { agentLog } from '../utils/logger';
 import { validateArtifact } from '../utils/validators';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 
 export abstract class BaseAgent {
   protected config: AgentConfig;

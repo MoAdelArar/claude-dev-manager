@@ -1,14 +1,14 @@
 import {
-  AgentRole,
-  HandoffPayload,
-  Artifact,
-  PipelineStage,
+  type AgentRole,
+  type HandoffPayload,
+  type Artifact,
+  type PipelineStage,
   MessageType,
   MessagePriority,
 } from '../types';
 import { validateHandoff } from '../utils/validators';
 import { agentLog } from '../utils/logger';
-import { MessageBus } from './message-bus';
+import { type MessageBus } from './message-bus';
 
 export interface HandoffResult {
   success: boolean;

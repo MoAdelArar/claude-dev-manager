@@ -1,5 +1,5 @@
 import { CloudProvider } from '../types';
-import { CloudProviderAdapter, NFRArtifacts, NFRContext } from './providers';
+import { type CloudProviderAdapter, type NFRArtifacts, type NFRContext } from './providers';
 import { AWSProvider } from './aws';
 import { GCPProvider } from './gcp';
 import { AzureProvider } from './azure';
@@ -27,7 +27,7 @@ export function generateMultiCloudNFR(ctx: NFRContext): Record<string, NFRArtifa
   return result;
 }
 
-export { CloudProviderAdapter, NFRArtifacts, NFRContext } from './providers';
+export type { CloudProviderAdapter, NFRArtifacts, NFRContext } from './providers';
 export { AWSProvider } from './aws';
 export { GCPProvider } from './gcp';
 export { AzureProvider } from './azure';

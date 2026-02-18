@@ -1,21 +1,21 @@
-import { spawn, execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { spawn, execSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
-  AgentRole,
-  AgentTask,
-  AgentResult,
+  type AgentRole,
+  type AgentTask,
+  type AgentResult,
   PipelineStage,
-  Artifact,
+  type Artifact,
   ArtifactType,
   ArtifactStatus,
   ReviewStatus,
-  Issue,
+  type Issue,
   IssueType,
   IssueSeverity,
 } from '../types';
-import { AgentRegistry } from '../agents/index';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type AgentRegistry } from '../agents/index';
+import { type ArtifactStore } from '../workspace/artifact-store';
 import logger from '../utils/logger';
 import { agentLog } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';

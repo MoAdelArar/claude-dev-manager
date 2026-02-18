@@ -1,16 +1,16 @@
 import {
-  AgentConfig,
+  type AgentConfig,
   AgentRole,
-  AgentTask,
-  Artifact,
+  type AgentTask,
+  type Artifact,
   ArtifactType,
-  Issue,
+  type Issue,
   IssueType,
   IssueSeverity,
   PipelineStage,
 } from '../types';
 import { BaseAgent } from './base-agent';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 
 const QA_ENGINEER_SYSTEM_PROMPT = `You are a senior QA engineer responsible for creating comprehensive test strategies
 and writing high-quality automated tests. Your goal is to ensure software correctness,

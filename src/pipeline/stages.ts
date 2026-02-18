@@ -1,5 +1,5 @@
 import {
-  StageConfig,
+  type StageConfig,
   PipelineStage,
   AgentRole,
   ArtifactType,

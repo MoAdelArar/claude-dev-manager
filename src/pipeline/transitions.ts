@@ -1,15 +1,15 @@
 import {
-  PipelineStage,
+  type PipelineStage,
   StageStatus,
-  StageResult,
-  Artifact,
-  ArtifactType,
-  Issue,
+  type StageResult,
+  type Artifact,
+  type ArtifactType,
+  type Issue,
   IssueSeverity,
-  Feature,
+  type Feature,
 } from '../types';
 import { getStageConfig, getNextStage } from './stages';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 import logger from '../utils/logger';
 
 export interface TransitionResult {

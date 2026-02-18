@@ -1,16 +1,16 @@
 import {
-  AgentConfig,
+  type AgentConfig,
   AgentRole,
-  AgentTask,
-  Artifact,
+  type AgentTask,
+  type Artifact,
   ArtifactType,
-  Issue,
+  type Issue,
   IssueType,
   IssueSeverity,
   PipelineStage,
 } from '../types';
 import { BaseAgent } from './base-agent';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 import { agentLog } from '../utils/logger';
 
 interface ParsedArtifact {

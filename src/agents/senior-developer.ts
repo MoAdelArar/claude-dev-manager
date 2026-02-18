@@ -1,15 +1,15 @@
 import {
-  AgentConfig,
+  type AgentConfig,
   AgentRole,
-  AgentTask,
-  Artifact,
+  type AgentTask,
+  type Artifact,
   ArtifactType,
-  Issue,
+  type Issue,
   IssueType,
   IssueSeverity,
 } from '../types';
 import { BaseAgent } from './base-agent';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 import { agentLog } from '../utils/logger';
 
 const SENIOR_DEVELOPER_SYSTEM_PROMPT = `You are a Senior Full-Stack Developer with 15+ years of professional experience

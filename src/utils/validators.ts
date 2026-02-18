@@ -1,13 +1,13 @@
 import {
-  Artifact,
+  type Artifact,
   ArtifactType,
   AgentRole,
   PipelineStage,
-  Feature,
-  StageResult,
+  type Feature,
+  type StageResult,
   StageStatus,
-  HandoffPayload,
-  Issue,
+  type HandoffPayload,
+  type Issue,
   IssueSeverity,
 } from '../types';
 

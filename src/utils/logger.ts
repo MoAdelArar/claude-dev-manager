@@ -1,5 +1,7 @@
 import winston from 'winston';
 import chalk from 'chalk';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { AgentRole, PipelineStage } from '../types';
 
 const AGENT_COLORS: Record<AgentRole, (text: string) => string> = {
@@ -54,8 +56,6 @@ const logger = winston.createLogger({
 });
 
 export function addFileTransport(projectPath: string): void {
-  const fs = require('fs');
-  const path = require('path');
   const logDir = path.join(projectPath, '.cdm', 'logs');
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });

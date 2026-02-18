@@ -1,15 +1,15 @@
 import {
-  AgentConfig,
+  type AgentConfig,
   AgentRole,
-  AgentTask,
-  Artifact,
+  type AgentTask,
+  type Artifact,
   ArtifactType,
-  Issue,
+  type Issue,
   IssueType,
   IssueSeverity,
 } from '../types';
 import { BaseAgent } from './base-agent';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 import { agentLog } from '../utils/logger';
 
 const JUNIOR_DEVELOPER_SYSTEM_PROMPT = `You are a Junior Developer who is eager to learn, diligent, and methodical in your

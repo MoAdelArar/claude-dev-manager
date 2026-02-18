@@ -1,16 +1,16 @@
 import {
-  AgentConfig,
+  type AgentConfig,
   AgentRole,
-  AgentTask,
-  Artifact,
+  type AgentTask,
+  type Artifact,
   ArtifactType,
-  Issue,
+  type Issue,
   IssueType,
   IssueSeverity,
   PipelineStage,
 } from '../types';
 import { BaseAgent } from './base-agent';
-import { ArtifactStore } from '../workspace/artifact-store';
+import { type ArtifactStore } from '../workspace/artifact-store';
 
 const CODE_REVIEWER_SYSTEM_PROMPT = `You are a principal software engineer performing rigorous code reviews.
 Your mission is to ensure every piece of code meets the highest standards of quality,

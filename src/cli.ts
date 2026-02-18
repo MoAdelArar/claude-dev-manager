@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import * as path from 'path';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -15,12 +16,12 @@ import { loadConfig, saveConfig, getDefaultConfig, CDMConfig } from './utils/con
 import logger, { addFileTransport, pipelineLog } from './utils/logger';
 import { ArtifactStore } from './workspace/artifact-store';
 import { ProjectContext } from './orchestrator/context';
-import { PipelineOrchestrator, PipelineOptions, PipelineResult } from './orchestrator/pipeline';
-import { ClaudeCodeBridge, ExecutionMode } from './orchestrator/claude-code-bridge';
+import { PipelineOrchestrator, type PipelineOptions, type PipelineResult } from './orchestrator/pipeline';
+import { ClaudeCodeBridge, type ExecutionMode } from './orchestrator/claude-code-bridge';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 
 // Read version from package.json at build time (resolved relative to dist/)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+ 
 const { version: VERSION } = require(path.join(__dirname, '..', 'package.json'));
 
 // ─── Global error handlers ───────────────────────────────────────────────────
@@ -133,8 +134,8 @@ program
       return;
     }
 
-    const analysisPath = require('path').join(projectPath, '.cdm', 'project-analysis.md');
-    if (!require('fs').existsSync(analysisPath)) {
+    const analysisPath = path.join(projectPath, '.cdm', 'project-analysis.md');
+    if (!fs.existsSync(analysisPath)) {
       console.log(chalk.yellow('Tip: Run `cdm analyze` first to generate a project analysis for smarter agent context.\n'));
     }
 
@@ -252,15 +253,15 @@ program
     console.log(chalk.green('✅ Generated agent instruction files in agents/'));
 
     const claudeMd = bridge.generateMainClaudeMd();
-    const claudeMdPath = require('path').join(projectPath, 'CLAUDE.md');
-    require('fs').writeFileSync(claudeMdPath, claudeMd, 'utf-8');
+    const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+    fs.writeFileSync(claudeMdPath, claudeMd, 'utf-8');
     console.log(chalk.green('✅ Generated CLAUDE.md'));
 
     console.log(chalk.gray('\n  Running project analysis...'));
     const analyzer = new ProjectAnalyzer(projectPath);
     const analysis = await analyzer.analyze();
     const markdown = analyzer.generateMarkdown(analysis);
-    const analysisPath = require('path').join(projectPath, '.cdm', 'project-analysis.md');
+    const analysisPath = path.join(projectPath, '.cdm', 'project-analysis.md');
     analyzer.saveAnalysis(analysisPath, markdown);
     console.log(chalk.green(`✅ Generated project analysis (${analysis.modules.length} modules, ${analysis.overview.totalLines.toLocaleString()} lines)`));
 
@@ -537,7 +538,7 @@ program
   .option('--json', 'Also output raw JSON analysis', false)
   .action(async (opts: any) => {
     const projectPath = opts.project;
-    const outputPath = opts.output ?? require('path').join(projectPath, '.cdm', 'project-analysis.md');
+    const outputPath = opts.output ?? path.join(projectPath, '.cdm', 'project-analysis.md');
 
     const spinner = ora();
     spinner.start(chalk.cyan('Analyzing project...'));
@@ -552,7 +553,7 @@ program
 
       if (opts.json) {
         const jsonPath = outputPath.replace(/\.md$/, '.json');
-        require('fs').writeFileSync(jsonPath, JSON.stringify(analysis, null, 2), 'utf-8');
+        fs.writeFileSync(jsonPath, JSON.stringify(analysis, null, 2), 'utf-8');
         console.log(chalk.green(`  JSON:     ${jsonPath}`));
       }
 

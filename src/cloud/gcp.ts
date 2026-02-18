@@ -1,5 +1,5 @@
 import { CloudProvider } from '../types';
-import { CloudProviderAdapter, CloudProviderProfile, NFRArtifacts, NFRContext } from './providers';
+import { type CloudProviderAdapter, type CloudProviderProfile, type NFRArtifacts, type NFRContext } from './providers';
 
 const GCP_PROFILE: CloudProviderProfile = {
   name: 'Google Cloud Platform',
