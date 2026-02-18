@@ -19,6 +19,7 @@ import { ProjectContext } from './orchestrator/context';
 import { PipelineOrchestrator, type PipelineOptions, type PipelineResult } from './orchestrator/pipeline';
 import { ClaudeCodeBridge, type ExecutionMode } from './orchestrator/claude-code-bridge';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
+import { CodeStyleProfiler } from './analyzer/codestyle-profiler';
 import { DevelopmentTracker } from './tracker/development-tracker';
 
 // Read version from package.json at build time (resolved relative to dist/)
@@ -265,6 +266,14 @@ program
     const analysisPath = path.join(projectPath, '.cdm', 'project-analysis.md');
     analyzer.saveAnalysis(analysisPath, markdown);
     console.log(chalk.green(`✅ Generated project analysis (${analysis.modules.length} modules, ${analysis.overview.totalLines.toLocaleString()} lines)`));
+
+    console.log(chalk.gray('  Profiling code style...'));
+    const profiler = new CodeStyleProfiler(projectPath);
+    const codeStyleProfile = await profiler.profile();
+    const profileMd = profiler.generateMarkdown(codeStyleProfile);
+    const profilePath = path.join(projectPath, '.cdm', 'codestyle-profile.md');
+    profiler.saveProfile(profilePath, profileMd);
+    console.log(chalk.green(`✅ Generated code style profile (${codeStyleProfile.architecture.pattern})`));
 
     console.log(chalk.bold.green('\n🎉 CDM initialized! Run `cdm start "your feature"` to begin.\n'));
   });
@@ -563,7 +572,20 @@ program
       console.log(chalk.white(`  Files:    ${analysis.overview.totalSourceFiles} source, ${analysis.overview.totalTestFiles} test`));
       console.log(chalk.white(`  Lines:    ${analysis.overview.totalLines.toLocaleString()}`));
       console.log(chalk.white(`  Deps:     ${analysis.dependencyGraph.length} internal edges, ${analysis.externalDeps.length} external`));
-      console.log(chalk.gray(`\n  Agents will use this file as context instead of scanning the full codebase.\n`));
+
+      spinner.start(chalk.cyan('Profiling code style...'));
+      const profiler = new CodeStyleProfiler(projectPath);
+      const styleProfile = await profiler.profile();
+      const profileMd = profiler.generateMarkdown(styleProfile);
+      const profilePath = path.join(projectPath, '.cdm', 'codestyle-profile.md');
+      profiler.saveProfile(profilePath, profileMd);
+      spinner.succeed(chalk.green(`Code style profile generated`));
+
+      console.log(chalk.green(`  Profile:  ${profilePath}`));
+      console.log(chalk.white(`  Arch:     ${styleProfile.architecture.pattern}`));
+      console.log(chalk.white(`  Style:    ${styleProfile.formatting.indentation}, ${styleProfile.formatting.quotes} quotes, ${styleProfile.formatting.semicolons ? 'semicolons' : 'no semicolons'}`));
+      console.log(chalk.white(`  Naming:   files=${styleProfile.naming.files}, vars=${styleProfile.naming.variables}`));
+      console.log(chalk.gray(`\n  Agents will follow these conventions when modifying the codebase.\n`));
     } catch (error) {
       spinner.fail(chalk.red('Analysis failed'));
       console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));

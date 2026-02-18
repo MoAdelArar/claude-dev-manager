@@ -64,6 +64,7 @@ export class PipelineOrchestrator {
   private bridge: ClaudeCodeBridge;
   private config: CDMConfig;
   private projectAnalysis: string | null = null;
+  private codeStyleProfile: string | null = null;
   private tracker: DevelopmentTracker;
 
   constructor(
@@ -89,6 +90,7 @@ export class PipelineOrchestrator {
 
     this.tracker = new DevelopmentTracker(project.rootPath, project.id, project.name);
     this.projectAnalysis = this.loadProjectAnalysis();
+    this.codeStyleProfile = this.loadCodeStyleProfile();
   }
 
   async runFeaturePipeline(
@@ -455,6 +457,12 @@ If the work meets standards, approve it. If changes are needed, detail what must
       instructions.push(`\n--- END PROJECT ANALYSIS ---`);
     }
 
+    if (this.codeStyleProfile) {
+      instructions.push(`\n--- CODE STYLE PROFILE (you MUST follow these conventions) ---\n`);
+      instructions.push(this.codeStyleProfile);
+      instructions.push(`\n--- END CODE STYLE PROFILE ---`);
+    }
+
     const previousResults = Array.from(feature.stageResults.entries());
     if (previousResults.length > 0) {
       instructions.push(`\nPrevious stage results:`);
@@ -480,6 +488,26 @@ If the work meets standards, approve it. If changes are needed, detail what must
         return content;
       } catch {
         pipelineLog('Failed to read project analysis file');
+      }
+    }
+
+    return null;
+  }
+
+  private loadCodeStyleProfile(): string | null {
+    const profilePath = path.join(
+      this.projectContext.getProject().rootPath,
+      '.cdm',
+      'codestyle-profile.md',
+    );
+
+    if (fs.existsSync(profilePath)) {
+      try {
+        const content = fs.readFileSync(profilePath, 'utf-8');
+        pipelineLog(`Loaded code style profile (${(content.length / 1024).toFixed(1)} KB)`);
+        return content;
+      } catch {
+        pipelineLog('Failed to read code style profile');
       }
     }
 
