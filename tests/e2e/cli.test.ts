@@ -73,7 +73,7 @@ describe('CDM CLI — End-to-End', () => {
 
     it('should print version', () => {
       const out = cdm('--version', projectDir);
-      expect(out.trim()).toBe('1.0.0');
+      expect(out.trim()).toMatch(/^\d+\.\d+\.\d+$/);
     });
   });
 

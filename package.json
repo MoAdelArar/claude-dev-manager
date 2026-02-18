@@ -1,6 +1,6 @@
 {
   "name": "claude-dev-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-agent development management system powered by Claude Code",
   "main": "dist/cli.js",
   "types": "dist/types.d.ts",
