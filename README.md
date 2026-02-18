@@ -571,27 +571,62 @@ cdm history --export
 
 ---
 
-## Claude Code Plugin
+## Claude Code Plugin (built-in)
 
-CDM also ships as an MCP server plugin for Claude Code — use CDM tools directly from Claude Code conversations:
+CDM includes a built-in MCP server — no separate plugin repo needed. Register it with Claude Code once:
 
 ```bash
-# Install the plugin
-git clone https://github.com/MoAdelArar/cdm-claude-code-plugin.git
-cd cdm-claude-code-plugin
+# One-command setup
 ./scripts/install.sh
 ```
 
-Then in Claude Code:
+This registers the MCP server and installs 12 slash commands. Restart Claude Code, then:
+
 ```
 You: /cdm-init
 You: /cdm-start Add user authentication with OAuth2
 You: /cdm-status
 You: /cdm-history
 You: /cdm-codestyle
+You: /cdm-artifacts
+You: /cdm-config
+You: /cdm-pipeline
 ```
 
-See the [plugin repo](https://github.com/MoAdelArar/cdm-claude-code-plugin) for details.
+### Manual MCP registration
+
+If you prefer to register manually, add to `~/.claude/mcp_servers.json`:
+
+```json
+{
+  "claude-dev-manager": {
+    "command": "node",
+    "args": ["/absolute/path/to/claude-dev-manager/dist/mcp-server.js"]
+  }
+}
+```
+
+### 17 MCP tools exposed
+
+| Tool | CLI Equivalent |
+|---|---|
+| `cdm_init` | `cdm init` |
+| `cdm_analyze` | `cdm analyze` |
+| `cdm_start_pipeline` | `cdm start` |
+| `cdm_resume_pipeline` | `cdm resume` |
+| `cdm_get_status` | `cdm status` |
+| `cdm_list_artifacts` | `cdm artifacts` |
+| `cdm_show_artifact` | `cdm show` (artifact) |
+| `cdm_show_feature` | `cdm show` (feature) |
+| `cdm_list_agents` | `cdm agents` |
+| `cdm_pipeline` | `cdm pipeline` |
+| `cdm_get_config` | `cdm config` |
+| `cdm_set_config` | `cdm config --set` |
+| `cdm_reset_config` | `cdm config --reset` |
+| `cdm_get_history` | `cdm history` |
+| `cdm_export_history` | `cdm history --export` |
+| `cdm_get_analysis` | *(direct read)* |
+| `cdm_get_codestyle` | *(direct read)* |
 
 ---
 
@@ -609,7 +644,10 @@ src/
   utils/            # Config, logger, validators
   workspace/        # Artifact persistence
   types.ts          # Core type definitions
-  cli.ts            # CLI entry point
+  cli.ts            # CLI entry point (npm/terminal)
+  mcp-server.ts     # MCP server entry point (Claude Code plugin)
+commands/           # Slash commands for Claude Code (/cdm-start, etc.)
+scripts/            # install.sh for Claude Code registration
 templates/          # Markdown artifact templates
 tests/
   unit/             # Unit tests
@@ -623,6 +661,7 @@ tests/
 ```bash
 npm run dev          # Run CLI via ts-node (no build needed)
 npm run build        # Compile TypeScript
+npm run mcp          # Start MCP server (for testing)
 npm test             # Type-check + run all tests with coverage
 npm run test:unit    # Unit tests only
 npm run test:e2e     # E2E tests only
