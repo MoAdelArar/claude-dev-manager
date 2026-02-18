@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "commonjs",
+    "lib": ["ES2023"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    "baseUrl": "./src",
+    "paths": {
+      "@agents/*": ["agents/*"],
+      "@orchestrator/*": ["orchestrator/*"],
+      "@pipeline/*": ["pipeline/*"],
+      "@communication/*": ["communication/*"],
+      "@workspace/*": ["workspace/*"],
+      "@utils/*": ["utils/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
