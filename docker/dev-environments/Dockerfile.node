@@ -1,0 +1,22 @@
+FROM node:20-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl build-essential \
+    python3 python3-pip \
+    jq tree vim \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g \
+    yarn pnpm \
+    typescript ts-node \
+    eslint prettier \
+    jest vitest \
+    @angular/cli \
+    create-react-app \
+    next
+
+# Claude Code — the AI coding agent
+RUN npm install -g @anthropic-ai/claude-code
+
+WORKDIR /workspace
+CMD ["sleep", "infinity"]
