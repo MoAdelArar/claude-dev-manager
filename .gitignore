@@ -1,0 +1,32 @@
+node_modules/
+dist/
+*.js.map
+*.d.ts
+
+# CDM runtime state (project-specific, not source)
+.cdm/
+/agents/
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+
+# Coverage
+coverage/
+
+# npm
+npm-debug.log*
