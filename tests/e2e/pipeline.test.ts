@@ -704,16 +704,16 @@ describe('AgentRegistry — E2E', () => {
     cleanDir(projectDir);
   });
 
-  it('should instantiate all 11 agents', () => {
+  it('should instantiate all 18 agents', () => {
     const registry = new AgentRegistry(artifactStore);
     const agents = registry.getAllAgents();
-    expect(agents.length).toBe(11);
+    expect(agents.length).toBe(18);
   });
 
   it('should return configs for all roles', () => {
     const registry = new AgentRegistry(artifactStore);
     const configs = registry.getAllConfigs();
-    expect(configs.length).toBe(11);
+    expect(configs.length).toBe(18);
 
     const roles = configs.map(c => c.role);
     expect(roles).toContain(AgentRole.PRODUCT_MANAGER);

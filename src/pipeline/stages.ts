@@ -10,9 +10,9 @@ const STAGE_CONFIGS: StageConfig[] = [
   {
     stage: PipelineStage.REQUIREMENTS_GATHERING,
     name: 'Requirements Gathering',
-    description: 'Product Manager analyzes the feature request, creates requirements, user stories, and acceptance criteria',
+    description: 'Product Manager analyzes the feature request with business analyst support, creates requirements, user stories, acceptance criteria, and business case',
     primaryAgent: AgentRole.PRODUCT_MANAGER,
-    supportingAgents: [],
+    supportingAgents: [AgentRole.BUSINESS_ANALYST],
     reviewers: [],
     requiredArtifacts: [],
     producedArtifacts: [
@@ -41,9 +41,9 @@ const STAGE_CONFIGS: StageConfig[] = [
   {
     stage: PipelineStage.ARCHITECTURE_DESIGN,
     name: 'Architecture Design',
-    description: 'System Architect designs the system architecture, APIs, and data models based on requirements',
+    description: 'System Architect designs the system architecture, APIs, and data models. Solutions Architect evaluates technology choices. Database Engineer designs the schema.',
     primaryAgent: AgentRole.SYSTEM_ARCHITECT,
-    supportingAgents: [AgentRole.ENGINEERING_MANAGER],
+    supportingAgents: [AgentRole.SOLUTIONS_ARCHITECT, AgentRole.DATABASE_ENGINEER, AgentRole.ENGINEERING_MANAGER],
     reviewers: [AgentRole.ENGINEERING_MANAGER],
     requiredArtifacts: [
       ArtifactType.REQUIREMENTS_DOC,
@@ -75,9 +75,9 @@ const STAGE_CONFIGS: StageConfig[] = [
   {
     stage: PipelineStage.UI_UX_DESIGN,
     name: 'UI/UX Design',
-    description: 'UI Designer creates interface specifications, wireframes, and component specs',
+    description: 'UI Designer creates interface specifications, wireframes, and component specs. Accessibility Specialist reviews for WCAG compliance.',
     primaryAgent: AgentRole.UI_DESIGNER,
-    supportingAgents: [],
+    supportingAgents: [AgentRole.ACCESSIBILITY_SPECIALIST],
     reviewers: [AgentRole.PRODUCT_MANAGER],
     requiredArtifacts: [
       ArtifactType.REQUIREMENTS_DOC,
@@ -191,9 +191,9 @@ const STAGE_CONFIGS: StageConfig[] = [
   {
     stage: PipelineStage.TESTING,
     name: 'Testing',
-    description: 'QA Engineer creates test plans, writes and runs tests at all levels',
+    description: 'QA Engineer creates test plans and writes tests. Performance Engineer designs load tests. Accessibility Specialist audits for WCAG compliance.',
     primaryAgent: AgentRole.QA_ENGINEER,
-    supportingAgents: [AgentRole.JUNIOR_DEVELOPER],
+    supportingAgents: [AgentRole.JUNIOR_DEVELOPER, AgentRole.PERFORMANCE_ENGINEER, AgentRole.ACCESSIBILITY_SPECIALIST],
     reviewers: [AgentRole.ENGINEERING_MANAGER],
     requiredArtifacts: [
       ArtifactType.SOURCE_CODE,
@@ -226,10 +226,10 @@ const STAGE_CONFIGS: StageConfig[] = [
   },
   {
     stage: PipelineStage.SECURITY_REVIEW,
-    name: 'Security Review',
-    description: 'Security Engineer performs comprehensive security audit',
+    name: 'Security & Compliance Review',
+    description: 'Security Engineer performs security audit. Compliance Officer reviews for regulatory compliance (GDPR, HIPAA, SOC2, PCI-DSS).',
     primaryAgent: AgentRole.SECURITY_ENGINEER,
-    supportingAgents: [],
+    supportingAgents: [AgentRole.COMPLIANCE_OFFICER],
     reviewers: [AgentRole.SENIOR_DEVELOPER, AgentRole.ENGINEERING_MANAGER],
     requiredArtifacts: [
       ArtifactType.SOURCE_CODE,
@@ -289,9 +289,9 @@ const STAGE_CONFIGS: StageConfig[] = [
   {
     stage: PipelineStage.DEPLOYMENT,
     name: 'Deployment & NFR',
-    description: 'DevOps Engineer creates deployment plan, CI/CD config, infrastructure setup, and non-functional requirement artifacts (monitoring, alerting, scaling, DR, cost, SLAs, runbooks) for the target cloud provider',
+    description: 'DevOps Engineer creates deployment plan, CI/CD, and cloud-specific NFR artifacts. SRE Engineer handles reliability, incident response, and capacity planning.',
     primaryAgent: AgentRole.DEVOPS_ENGINEER,
-    supportingAgents: [],
+    supportingAgents: [AgentRole.SRE_ENGINEER],
     reviewers: [AgentRole.ENGINEERING_MANAGER, AgentRole.SECURITY_ENGINEER],
     requiredArtifacts: [
       ArtifactType.SOURCE_CODE,

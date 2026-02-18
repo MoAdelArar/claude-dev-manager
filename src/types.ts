@@ -7,14 +7,21 @@
 
 export enum AgentRole {
   PRODUCT_MANAGER = 'product_manager',
+  BUSINESS_ANALYST = 'business_analyst',
   ENGINEERING_MANAGER = 'engineering_manager',
+  SOLUTIONS_ARCHITECT = 'solutions_architect',
   SYSTEM_ARCHITECT = 'system_architect',
   UI_DESIGNER = 'ui_designer',
   SENIOR_DEVELOPER = 'senior_developer',
   JUNIOR_DEVELOPER = 'junior_developer',
+  DATABASE_ENGINEER = 'database_engineer',
   CODE_REVIEWER = 'code_reviewer',
   QA_ENGINEER = 'qa_engineer',
+  PERFORMANCE_ENGINEER = 'performance_engineer',
   SECURITY_ENGINEER = 'security_engineer',
+  COMPLIANCE_OFFICER = 'compliance_officer',
+  ACCESSIBILITY_SPECIALIST = 'accessibility_specialist',
+  SRE_ENGINEER = 'sre_engineer',
   DEVOPS_ENGINEER = 'devops_engineer',
   DOCUMENTATION_WRITER = 'documentation_writer',
 }
@@ -175,6 +182,23 @@ export enum ArtifactType {
   PERFORMANCE_BENCHMARK = 'performance_benchmark',
   RUNBOOK = 'runbook',
   DEVELOPMENT_HISTORY = 'development_history',
+  TECHNOLOGY_DECISION_RECORD = 'technology_decision_record',
+  INTEGRATION_PLAN = 'integration_plan',
+  MIGRATION_STRATEGY = 'migration_strategy',
+  DATABASE_SCHEMA = 'database_schema',
+  MIGRATION_SCRIPT = 'migration_script',
+  QUERY_OPTIMIZATION_REPORT = 'query_optimization_report',
+  LOAD_TEST_PLAN = 'load_test_plan',
+  PERFORMANCE_REPORT = 'performance_report',
+  COMPLIANCE_REPORT = 'compliance_report',
+  PRIVACY_IMPACT_ASSESSMENT = 'privacy_impact_assessment',
+  ACCESSIBILITY_REPORT = 'accessibility_report',
+  ACCESSIBILITY_TEST_SUITE = 'accessibility_test_suite',
+  BUSINESS_CASE = 'business_case',
+  ROI_ANALYSIS = 'roi_analysis',
+  INCIDENT_RESPONSE_PLAN = 'incident_response_plan',
+  CAPACITY_PLAN = 'capacity_plan',
+  CHAOS_TEST_PLAN = 'chaos_test_plan',
 }
 
 export interface Artifact {
@@ -350,6 +374,9 @@ export enum IssueType {
   OBSERVABILITY = 'observability',
   COST_OPTIMIZATION = 'cost_optimization',
   RELIABILITY = 'reliability',
+  COMPLIANCE_VIOLATION = 'compliance_violation',
+  ACCESSIBILITY_VIOLATION = 'accessibility_violation',
+  DATA_PRIVACY_CONCERN = 'data_privacy_concern',
 }
 
 export enum IssueSeverity {

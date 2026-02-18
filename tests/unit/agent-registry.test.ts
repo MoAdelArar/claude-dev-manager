@@ -69,23 +69,23 @@ describe('AgentRegistry', () => {
   });
 
   describe('getAllAgents', () => {
-    it('should return all 11 agents', () => {
+    it('should return all 18 agents', () => {
       const agents = registry.getAllAgents();
-      expect(agents).toHaveLength(11);
+      expect(agents).toHaveLength(18);
     });
   });
 
   describe('getAllConfigs', () => {
-    it('should return all 11 configs', () => {
+    it('should return all 18 configs', () => {
       const configs = registry.getAllConfigs();
-      expect(configs).toHaveLength(11);
+      expect(configs).toHaveLength(18);
     });
   });
 
   describe('getTeamHierarchy', () => {
     it('should return valid hierarchy', () => {
       const hierarchy = registry.getTeamHierarchy();
-      expect(hierarchy.size).toBe(11);
+      expect(hierarchy.size).toBe(18);
 
       const pmReports = hierarchy.get(AgentRole.PRODUCT_MANAGER);
       expect(pmReports).toBeDefined();

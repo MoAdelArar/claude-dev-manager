@@ -464,6 +464,25 @@ export class ClaudeCodeBridge {
       performance_benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
       benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
       runbook: ArtifactType.RUNBOOK,
+      technology_decision_record: ArtifactType.TECHNOLOGY_DECISION_RECORD,
+      tdr: ArtifactType.TECHNOLOGY_DECISION_RECORD,
+      integration_plan: ArtifactType.INTEGRATION_PLAN,
+      migration_strategy: ArtifactType.MIGRATION_STRATEGY,
+      database_schema: ArtifactType.DATABASE_SCHEMA,
+      schema: ArtifactType.DATABASE_SCHEMA,
+      migration_script: ArtifactType.MIGRATION_SCRIPT,
+      query_optimization_report: ArtifactType.QUERY_OPTIMIZATION_REPORT,
+      load_test_plan: ArtifactType.LOAD_TEST_PLAN,
+      performance_report: ArtifactType.PERFORMANCE_REPORT,
+      compliance_report: ArtifactType.COMPLIANCE_REPORT,
+      privacy_impact_assessment: ArtifactType.PRIVACY_IMPACT_ASSESSMENT,
+      accessibility_report: ArtifactType.ACCESSIBILITY_REPORT,
+      accessibility_test_suite: ArtifactType.ACCESSIBILITY_TEST_SUITE,
+      business_case: ArtifactType.BUSINESS_CASE,
+      roi_analysis: ArtifactType.ROI_ANALYSIS,
+      incident_response_plan: ArtifactType.INCIDENT_RESPONSE_PLAN,
+      capacity_plan: ArtifactType.CAPACITY_PLAN,
+      chaos_test_plan: ArtifactType.CHAOS_TEST_PLAN,
     };
     return mapping[normalized] ?? null;
   }
@@ -485,6 +504,12 @@ export class ClaudeCodeBridge {
       observability: IssueType.OBSERVABILITY,
       cost_optimization: IssueType.COST_OPTIMIZATION,
       reliability: IssueType.RELIABILITY,
+      compliance_violation: IssueType.COMPLIANCE_VIOLATION,
+      compliance: IssueType.COMPLIANCE_VIOLATION,
+      accessibility_violation: IssueType.ACCESSIBILITY_VIOLATION,
+      accessibility: IssueType.ACCESSIBILITY_VIOLATION,
+      data_privacy_concern: IssueType.DATA_PRIVACY_CONCERN,
+      data_privacy: IssueType.DATA_PRIVACY_CONCERN,
     };
     return mapping[normalized] ?? IssueType.BUG;
   }

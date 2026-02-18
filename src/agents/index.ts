@@ -13,6 +13,13 @@ import QAEngineerAgent, { qaEngineerConfig } from './qa-engineer';
 import SecurityEngineerAgent, { SECURITY_ENGINEER_CONFIG } from './security-engineer';
 import DevOpsEngineerAgent, { DEVOPS_ENGINEER_CONFIG } from './devops-engineer';
 import DocumentationWriterAgent, { DOCUMENTATION_WRITER_CONFIG } from './documentation-writer';
+import SolutionsArchitectAgent, { SOLUTIONS_ARCHITECT_CONFIG } from './solutions-architect';
+import SREEngineerAgent, { SRE_ENGINEER_CONFIG } from './sre-engineer';
+import DatabaseEngineerAgent, { DATABASE_ENGINEER_CONFIG } from './database-engineer';
+import PerformanceEngineerAgent, { PERFORMANCE_ENGINEER_CONFIG } from './performance-engineer';
+import ComplianceOfficerAgent, { COMPLIANCE_OFFICER_CONFIG } from './compliance-officer';
+import BusinessAnalystAgent, { BUSINESS_ANALYST_CONFIG } from './business-analyst';
+import AccessibilitySpecialistAgent, { ACCESSIBILITY_SPECIALIST_CONFIG } from './accessibility-specialist';
 
 export type AgentFactory = (artifactStore: ArtifactStore) => BaseAgent;
 
@@ -28,6 +35,13 @@ const AGENT_FACTORIES: Record<AgentRole, AgentFactory> = {
   [AgentRole.SECURITY_ENGINEER]: (store) => new SecurityEngineerAgent(store),
   [AgentRole.DEVOPS_ENGINEER]: (store) => new DevOpsEngineerAgent(store),
   [AgentRole.DOCUMENTATION_WRITER]: (store) => new DocumentationWriterAgent(store),
+  [AgentRole.SOLUTIONS_ARCHITECT]: (store) => new SolutionsArchitectAgent(store),
+  [AgentRole.SRE_ENGINEER]: (store) => new SREEngineerAgent(store),
+  [AgentRole.DATABASE_ENGINEER]: (store) => new DatabaseEngineerAgent(store),
+  [AgentRole.PERFORMANCE_ENGINEER]: (store) => new PerformanceEngineerAgent(store),
+  [AgentRole.COMPLIANCE_OFFICER]: (store) => new ComplianceOfficerAgent(store),
+  [AgentRole.BUSINESS_ANALYST]: (store) => new BusinessAnalystAgent(store),
+  [AgentRole.ACCESSIBILITY_SPECIALIST]: (store) => new AccessibilitySpecialistAgent(store),
 };
 
 const AGENT_CONFIGS: Record<AgentRole, AgentConfig> = {
@@ -42,6 +56,13 @@ const AGENT_CONFIGS: Record<AgentRole, AgentConfig> = {
   [AgentRole.SECURITY_ENGINEER]: SECURITY_ENGINEER_CONFIG,
   [AgentRole.DEVOPS_ENGINEER]: DEVOPS_ENGINEER_CONFIG,
   [AgentRole.DOCUMENTATION_WRITER]: DOCUMENTATION_WRITER_CONFIG,
+  [AgentRole.SOLUTIONS_ARCHITECT]: SOLUTIONS_ARCHITECT_CONFIG,
+  [AgentRole.SRE_ENGINEER]: SRE_ENGINEER_CONFIG,
+  [AgentRole.DATABASE_ENGINEER]: DATABASE_ENGINEER_CONFIG,
+  [AgentRole.PERFORMANCE_ENGINEER]: PERFORMANCE_ENGINEER_CONFIG,
+  [AgentRole.COMPLIANCE_OFFICER]: COMPLIANCE_OFFICER_CONFIG,
+  [AgentRole.BUSINESS_ANALYST]: BUSINESS_ANALYST_CONFIG,
+  [AgentRole.ACCESSIBILITY_SPECIALIST]: ACCESSIBILITY_SPECIALIST_CONFIG,
 };
 
 export class AgentRegistry {
@@ -120,4 +141,11 @@ export {
   SecurityEngineerAgent,
   DevOpsEngineerAgent,
   DocumentationWriterAgent,
+  SolutionsArchitectAgent,
+  SREEngineerAgent,
+  DatabaseEngineerAgent,
+  PerformanceEngineerAgent,
+  ComplianceOfficerAgent,
+  BusinessAnalystAgent,
+  AccessibilitySpecialistAgent,
 };

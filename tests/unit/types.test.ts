@@ -17,18 +17,25 @@ import {
 
 describe('Type Enums', () => {
   describe('AgentRole', () => {
-    it('should have all 11 agent roles defined', () => {
+    it('should have all 18 agent roles defined', () => {
       const roles = Object.values(AgentRole);
-      expect(roles).toHaveLength(11);
+      expect(roles).toHaveLength(18);
       expect(roles).toContain('product_manager');
+      expect(roles).toContain('business_analyst');
       expect(roles).toContain('engineering_manager');
+      expect(roles).toContain('solutions_architect');
       expect(roles).toContain('system_architect');
       expect(roles).toContain('ui_designer');
       expect(roles).toContain('senior_developer');
       expect(roles).toContain('junior_developer');
+      expect(roles).toContain('database_engineer');
       expect(roles).toContain('code_reviewer');
       expect(roles).toContain('qa_engineer');
+      expect(roles).toContain('performance_engineer');
       expect(roles).toContain('security_engineer');
+      expect(roles).toContain('compliance_officer');
+      expect(roles).toContain('accessibility_specialist');
+      expect(roles).toContain('sre_engineer');
       expect(roles).toContain('devops_engineer');
       expect(roles).toContain('documentation_writer');
     });

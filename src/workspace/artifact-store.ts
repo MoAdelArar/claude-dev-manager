@@ -84,12 +84,18 @@ export class ArtifactStore {
         ArtifactType.REQUIREMENTS_DOC,
         ArtifactType.USER_STORIES,
         ArtifactType.ACCEPTANCE_CRITERIA,
+        ArtifactType.BUSINESS_CASE,
+        ArtifactType.ROI_ANALYSIS,
       ],
       [PipelineStage.ARCHITECTURE_DESIGN]: [
         ArtifactType.ARCHITECTURE_DOC,
         ArtifactType.SYSTEM_DIAGRAM,
         ArtifactType.API_SPEC,
         ArtifactType.DATA_MODEL,
+        ArtifactType.TECHNOLOGY_DECISION_RECORD,
+        ArtifactType.INTEGRATION_PLAN,
+        ArtifactType.MIGRATION_STRATEGY,
+        ArtifactType.DATABASE_SCHEMA,
       ],
       [PipelineStage.UI_UX_DESIGN]: [
         ArtifactType.UI_SPEC,
@@ -102,6 +108,7 @@ export class ArtifactStore {
       ],
       [PipelineStage.IMPLEMENTATION]: [
         ArtifactType.SOURCE_CODE,
+        ArtifactType.MIGRATION_SCRIPT,
       ],
       [PipelineStage.CODE_REVIEW]: [
         ArtifactType.CODE_REVIEW_REPORT,
@@ -112,9 +119,15 @@ export class ArtifactStore {
         ArtifactType.INTEGRATION_TESTS,
         ArtifactType.E2E_TESTS,
         ArtifactType.TEST_REPORT,
+        ArtifactType.LOAD_TEST_PLAN,
+        ArtifactType.PERFORMANCE_REPORT,
+        ArtifactType.ACCESSIBILITY_REPORT,
+        ArtifactType.ACCESSIBILITY_TEST_SUITE,
       ],
       [PipelineStage.SECURITY_REVIEW]: [
         ArtifactType.SECURITY_REPORT,
+        ArtifactType.COMPLIANCE_REPORT,
+        ArtifactType.PRIVACY_IMPACT_ASSESSMENT,
       ],
       [PipelineStage.DOCUMENTATION]: [
         ArtifactType.API_DOCUMENTATION,
@@ -134,6 +147,9 @@ export class ArtifactStore {
         ArtifactType.DISASTER_RECOVERY_PLAN,
         ArtifactType.PERFORMANCE_BENCHMARK,
         ArtifactType.RUNBOOK,
+        ArtifactType.INCIDENT_RESPONSE_PLAN,
+        ArtifactType.CAPACITY_PLAN,
+        ArtifactType.CHAOS_TEST_PLAN,
       ],
       [PipelineStage.COMPLETED]: [],
     };

@@ -203,14 +203,21 @@ program
 
     const agents = [
       { role: AgentRole.PRODUCT_MANAGER, icon: '📋', title: 'Product Manager', desc: 'Requirements, user stories, acceptance criteria' },
+      { role: AgentRole.BUSINESS_ANALYST, icon: '📊', title: 'Business Analyst', desc: 'ROI analysis, business cases, KPIs, market research' },
       { role: AgentRole.ENGINEERING_MANAGER, icon: '👔', title: 'Engineering Manager', desc: 'Task breakdown, sprint planning, coordination' },
+      { role: AgentRole.SOLUTIONS_ARCHITECT, icon: '🔧', title: 'Solutions Architect', desc: 'Technology decisions, integration design, migration planning' },
       { role: AgentRole.SYSTEM_ARCHITECT, icon: '🏗️', title: 'System Architect', desc: 'Architecture, API design, data modeling' },
       { role: AgentRole.UI_DESIGNER, icon: '🎨', title: 'UI/UX Designer', desc: 'Interface design, wireframes, components' },
       { role: AgentRole.SENIOR_DEVELOPER, icon: '💻', title: 'Senior Developer', desc: 'Complex features, core code, architecture implementation' },
       { role: AgentRole.JUNIOR_DEVELOPER, icon: '🔧', title: 'Junior Developer', desc: 'Simpler features, utilities, unit tests' },
+      { role: AgentRole.DATABASE_ENGINEER, icon: '🗄️', title: 'Database Engineer', desc: 'Schema design, migrations, query optimization' },
       { role: AgentRole.CODE_REVIEWER, icon: '🔍', title: 'Code Reviewer', desc: 'Code quality, best practices, standards' },
       { role: AgentRole.QA_ENGINEER, icon: '🧪', title: 'QA Engineer', desc: 'Test plans, all test levels, quality assurance' },
+      { role: AgentRole.PERFORMANCE_ENGINEER, icon: '⚡', title: 'Performance Engineer', desc: 'Load testing, profiling, bottleneck analysis' },
       { role: AgentRole.SECURITY_ENGINEER, icon: '🔒', title: 'Security Engineer', desc: 'Security audit, vulnerability assessment' },
+      { role: AgentRole.COMPLIANCE_OFFICER, icon: '📜', title: 'Compliance Officer', desc: 'GDPR, HIPAA, SOC2, PCI-DSS, privacy assessments' },
+      { role: AgentRole.ACCESSIBILITY_SPECIALIST, icon: '♿', title: 'Accessibility Specialist', desc: 'WCAG compliance, screen reader support, a11y testing' },
+      { role: AgentRole.SRE_ENGINEER, icon: '🔥', title: 'SRE Engineer', desc: 'Reliability, incident response, chaos engineering, capacity planning' },
       { role: AgentRole.DEVOPS_ENGINEER, icon: '🚀', title: 'DevOps Engineer', desc: 'CI/CD, deployment, infrastructure' },
       { role: AgentRole.DOCUMENTATION_WRITER, icon: '📚', title: 'Documentation Writer', desc: 'API docs, guides, changelogs' },
     ];
@@ -221,9 +228,14 @@ program
     }
 
     console.log(chalk.gray('\n  Team hierarchy:'));
+    console.log(chalk.gray('  Product Manager → Business Analyst'));
     console.log(chalk.gray('  Product Manager → Engineering Manager → Developers'));
     console.log(chalk.gray('  Product Manager → UI/UX Designer'));
-    console.log(chalk.gray('  Engineering Manager → Code Reviewer, QA, Security, DevOps, Docs\n'));
+    console.log(chalk.gray('  Engineering Manager → Solutions Architect, System Architect'));
+    console.log(chalk.gray('  Engineering Manager → Database Engineer'));
+    console.log(chalk.gray('  Engineering Manager → Code Reviewer, QA, Performance Engineer'));
+    console.log(chalk.gray('  Engineering Manager → Security Engineer, Compliance Officer, Accessibility Specialist'));
+    console.log(chalk.gray('  Engineering Manager → SRE Engineer, DevOps Engineer, Docs\n'));
   });
 
 // ─── cdm init ────────────────────────────────────────────────────────────────

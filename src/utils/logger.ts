@@ -6,15 +6,22 @@ import { AgentRole, PipelineStage } from '../types';
 
 const AGENT_COLORS: Record<AgentRole, (text: string) => string> = {
   [AgentRole.PRODUCT_MANAGER]: chalk.magenta,
+  [AgentRole.BUSINESS_ANALYST]: chalk.magentaBright,
   [AgentRole.ENGINEERING_MANAGER]: chalk.blue,
+  [AgentRole.SOLUTIONS_ARCHITECT]: chalk.cyanBright,
   [AgentRole.SYSTEM_ARCHITECT]: chalk.cyan,
   [AgentRole.UI_DESIGNER]: chalk.yellow,
   [AgentRole.SENIOR_DEVELOPER]: chalk.green,
   [AgentRole.JUNIOR_DEVELOPER]: chalk.greenBright,
+  [AgentRole.DATABASE_ENGINEER]: chalk.blueBright,
   [AgentRole.CODE_REVIEWER]: chalk.red,
   [AgentRole.QA_ENGINEER]: chalk.yellowBright,
+  [AgentRole.PERFORMANCE_ENGINEER]: chalk.yellow,
   [AgentRole.SECURITY_ENGINEER]: chalk.redBright,
-  [AgentRole.DEVOPS_ENGINEER]: chalk.blueBright,
+  [AgentRole.COMPLIANCE_OFFICER]: chalk.red,
+  [AgentRole.ACCESSIBILITY_SPECIALIST]: chalk.greenBright,
+  [AgentRole.SRE_ENGINEER]: chalk.blueBright,
+  [AgentRole.DEVOPS_ENGINEER]: chalk.blue,
   [AgentRole.DOCUMENTATION_WRITER]: chalk.white,
 };
 
