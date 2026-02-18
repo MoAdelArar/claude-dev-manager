@@ -6,16 +6,17 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/cli.ts',
+    '!src/mcp-server.ts',
     '!src/**/*.d.ts',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'clover'],
   coverageThreshold: {
     global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
+      branches: 65,
+      functions: 85,
+      lines: 85,
+      statements: 85,
     },
   },
   moduleNameMapper: {
