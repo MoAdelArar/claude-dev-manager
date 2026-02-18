@@ -16,6 +16,7 @@ import { ArtifactStore } from './workspace/artifact-store';
 import { ProjectContext } from './orchestrator/context';
 import { PipelineOrchestrator, PipelineOptions, PipelineResult } from './orchestrator/pipeline';
 import { ClaudeCodeBridge, ExecutionMode } from './orchestrator/claude-code-bridge';
+import { ProjectAnalyzer } from './analyzer/project-analyzer';
 
 const VERSION = '1.0.0';
 
@@ -101,6 +102,11 @@ program
       console.log(chalk.yellow('\n📋 DRY RUN — Pipeline stages that would execute:\n'));
       printPipelinePlan(skipStages);
       return;
+    }
+
+    const analysisPath = require('path').join(projectPath, '.cdm', 'project-analysis.md');
+    if (!require('fs').existsSync(analysisPath)) {
+      console.log(chalk.yellow('Tip: Run `cdm analyze` first to generate a project analysis for smarter agent context.\n'));
     }
 
     const bridgeOptions = {
@@ -220,6 +226,14 @@ program
     const claudeMdPath = require('path').join(projectPath, 'CLAUDE.md');
     require('fs').writeFileSync(claudeMdPath, claudeMd, 'utf-8');
     console.log(chalk.green('✅ Generated CLAUDE.md'));
+
+    console.log(chalk.gray('\n  Running project analysis...'));
+    const analyzer = new ProjectAnalyzer(projectPath);
+    const analysis = await analyzer.analyze();
+    const markdown = analyzer.generateMarkdown(analysis);
+    const analysisPath = require('path').join(projectPath, '.cdm', 'project-analysis.md');
+    analyzer.saveAnalysis(analysisPath, markdown);
+    console.log(chalk.green(`✅ Generated project analysis (${analysis.modules.length} modules, ${analysis.overview.totalLines.toLocaleString()} lines)`));
 
     console.log(chalk.bold.green('\n🎉 CDM initialized! Run `cdm start "your feature"` to begin.\n'));
   });
@@ -482,6 +496,48 @@ program
     }
 
     console.log(chalk.gray('\nUse --set to modify values (e.g. cdm config --set pipeline.maxRetries=3)\n'));
+  });
+
+// ─── cdm analyze ────────────────────────────────────────────────────────────
+
+program
+  .command('analyze')
+  .description('Analyze the target project and generate a structured analysis file for agents')
+  .option('--project <path>', 'Project path to analyze', process.cwd())
+  .option('-o, --output <path>', 'Output path for analysis file (default: .cdm/project-analysis.md)')
+  .option('--json', 'Also output raw JSON analysis', false)
+  .action(async (opts: any) => {
+    const projectPath = opts.project;
+    const outputPath = opts.output ?? require('path').join(projectPath, '.cdm', 'project-analysis.md');
+
+    const spinner = ora();
+    spinner.start(chalk.cyan('Analyzing project...'));
+
+    try {
+      const analyzer = new ProjectAnalyzer(projectPath);
+      const analysis = await analyzer.analyze();
+      const markdown = analyzer.generateMarkdown(analysis);
+
+      analyzer.saveAnalysis(outputPath, markdown);
+      spinner.succeed(chalk.green(`Analysis complete`));
+
+      if (opts.json) {
+        const jsonPath = outputPath.replace(/\.md$/, '.json');
+        require('fs').writeFileSync(jsonPath, JSON.stringify(analysis, null, 2), 'utf-8');
+        console.log(chalk.green(`  JSON:     ${jsonPath}`));
+      }
+
+      console.log(chalk.green(`  Output:   ${outputPath}`));
+      console.log(chalk.white(`  Modules:  ${analysis.modules.length}`));
+      console.log(chalk.white(`  Files:    ${analysis.overview.totalSourceFiles} source, ${analysis.overview.totalTestFiles} test`));
+      console.log(chalk.white(`  Lines:    ${analysis.overview.totalLines.toLocaleString()}`));
+      console.log(chalk.white(`  Deps:     ${analysis.dependencyGraph.length} internal edges, ${analysis.externalDeps.length} external`));
+      console.log(chalk.gray(`\n  Agents will use this file as context instead of scanning the full codebase.\n`));
+    } catch (error) {
+      spinner.fail(chalk.red('Analysis failed'));
+      console.error(chalk.red(`Error: ${error instanceof Error ? error.message : error}`));
+      process.exit(1);
+    }
   });
 
 // ─── cdm pipeline ────────────────────────────────────────────────────────────

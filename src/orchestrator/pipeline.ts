@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Feature,
@@ -60,6 +62,7 @@ export class PipelineOrchestrator {
   private projectContext: ProjectContext;
   private bridge: ClaudeCodeBridge;
   private config: CDMConfig;
+  private projectAnalysis: string | null = null;
 
   constructor(
     projectContext: ProjectContext,
@@ -80,6 +83,8 @@ export class PipelineOrchestrator {
       projectPath: projectContext.getProject().rootPath,
       ...bridgeOptions,
     });
+
+    this.projectAnalysis = this.loadProjectAnalysis();
   }
 
   async runFeaturePipeline(
@@ -417,6 +422,12 @@ If the work meets standards, approve it. If changes are needed, detail what must
       instructions.push(`\nCustom instructions: ${project.config.customInstructions}`);
     }
 
+    if (this.projectAnalysis) {
+      instructions.push(`\n--- PROJECT ANALYSIS (use this as your primary reference for the codebase) ---\n`);
+      instructions.push(this.projectAnalysis);
+      instructions.push(`\n--- END PROJECT ANALYSIS ---`);
+    }
+
     const previousResults = Array.from(feature.stageResults.entries());
     if (previousResults.length > 0) {
       instructions.push(`\nPrevious stage results:`);
@@ -426,6 +437,26 @@ If the work meets standards, approve it. If changes are needed, detail what must
     }
 
     return instructions.join('\n');
+  }
+
+  private loadProjectAnalysis(): string | null {
+    const analysisPath = path.join(
+      this.projectContext.getProject().rootPath,
+      '.cdm',
+      'project-analysis.md',
+    );
+
+    if (fs.existsSync(analysisPath)) {
+      try {
+        const content = fs.readFileSync(analysisPath, 'utf-8');
+        pipelineLog(`Loaded project analysis (${(content.length / 1024).toFixed(1)} KB)`);
+        return content;
+      } catch {
+        pipelineLog('Failed to read project analysis file');
+      }
+    }
+
+    return null;
   }
 
   private getAgentConstraints(agentRole: AgentRole, stage: PipelineStage): string[] {
