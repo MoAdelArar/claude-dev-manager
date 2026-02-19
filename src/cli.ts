@@ -59,6 +59,21 @@ program
   .description('Claude Dev Manager — Multi-agent development management system powered by Claude Code')
   .version(VERSION);
 
+function guardSelfInit(projectPath: string): void {
+  const selfPkg = path.join(path.resolve(projectPath), 'package.json');
+  if (fs.existsSync(selfPkg)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(selfPkg, 'utf-8'));
+      if (pkg.name === 'claude-dev-manager') {
+        console.log(chalk.red('\nError: Cannot run CDM on its own source/install directory.'));
+        console.log(chalk.gray('Use --project <path> to point to your target project.\n'));
+        console.log(chalk.gray('Example: cdm init --project ~/my-app\n'));
+        process.exit(1);
+      }
+    } catch { /* not parseable, fine to proceed */ }
+  }
+}
+
 // ─── cdm start ───────────────────────────────────────────────────────────────
 
 program
@@ -76,6 +91,7 @@ program
   .option('-v, --verbose', 'Verbose output', false)
   .action(async (description: string, opts: any) => {
     const projectPath = opts.project;
+    guardSelfInit(projectPath);
     const config = loadConfig(projectPath);
 
     if (opts.verbose) {
@@ -245,7 +261,9 @@ program
   .description('Initialize CDM in the current project')
   .option('--project <path>', 'Project path', process.cwd())
   .action(async (opts: any) => {
-    const projectPath = opts.project;
+    const projectPath = path.resolve(opts.project);
+    guardSelfInit(projectPath);
+
     console.log(chalk.bold.cyan('\n🔧 Initializing Claude Dev Manager\n'));
 
     const config = getDefaultConfig();
@@ -560,6 +578,7 @@ program
   .option('--json', 'Also output raw JSON analysis', false)
   .action(async (opts: any) => {
     const projectPath = opts.project;
+    guardSelfInit(projectPath);
     const outputPath = opts.output ?? path.join(projectPath, '.cdm', 'project-analysis.md');
 
     const spinner = ora();

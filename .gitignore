@@ -3,9 +3,14 @@ dist/
 *.js.map
 *.d.ts
 
-# CDM runtime state (project-specific, not source)
+# CDM generated files (created by `cdm init` / `cdm analyze` on target projects)
 .cdm/
 /agents/
+cdm.config.yaml
+cdm.config.yml
+cdm.config.json
+.cdmrc
+CLAUDE.md
 
 # Logs
 logs/
