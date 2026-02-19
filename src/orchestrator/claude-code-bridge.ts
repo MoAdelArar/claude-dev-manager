@@ -202,7 +202,6 @@ export class ClaudeCodeBridge {
     s.push('│   ├── product-manager.md');
     s.push('│   ├── senior-developer.md');
     s.push('│   └── ... (one per agent)');
-    s.push('├── agent-prompts/            # Runtime task prompts (generated during pipeline)');
     s.push('├── features/                 # Feature state files (one JSON per feature)');
     s.push('└── artifacts/                # Produced artifacts from pipeline stages');
     s.push('```\n');
@@ -259,8 +258,7 @@ export class ClaudeCodeBridge {
     s.push('2. Include the project context from `.cdm/analysis/overview.md`');
     s.push('3. Include the code style rules from `.cdm/analysis/codestyle.md`');
     s.push('4. Read `.cdm/analysis/<entity>.md` for the relevant source directories');
-    s.push('5. Provide all relevant input artifacts and clear output expectations');
-    s.push('6. Task prompts are saved to `.cdm/agent-prompts/` for traceability\n');
+    s.push('5. Provide all relevant input artifacts and clear output expectations\n');
 
     // ── Artifact format ────────────────────────────────────────────────
     s.push('## Artifact Format\n');
@@ -606,7 +604,7 @@ export class ClaudeCodeBridge {
             updatedAt: new Date(),
             version: 1,
             content: contentMatch[1].trim(),
-            metadata: { taskId: task.id, stage: task.stage },
+            metadata: { taskId: task.id, stage: task.stage, featureId: task.featureId },
             status: ArtifactStatus.DRAFT,
             reviewStatus: ReviewStatus.PENDING,
           });

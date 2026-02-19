@@ -539,18 +539,20 @@ describe('DevelopmentTracker', () => {
       expect(events[0].timestamp).toBeInstanceOf(Date);
     });
 
-    it('events file is written after each record call', () => {
+    it('events file is written after each record call (NDJSON format)', () => {
       const eventsFile = path.join(tempDir, '.cdm', 'history', 'events.json');
 
       tracker.recordFeatureCreated(makeFeature());
       expect(fs.existsSync(eventsFile)).toBe(true);
 
-      const raw = JSON.parse(fs.readFileSync(eventsFile, 'utf-8'));
-      expect(raw).toHaveLength(1);
+      const lines1 = fs.readFileSync(eventsFile, 'utf-8').trim().split('\n').filter(l => l.trim());
+      expect(lines1).toHaveLength(1);
+      expect(JSON.parse(lines1[0]).type).toBe(TrackingEventType.FEATURE_CREATED);
 
       tracker.recordAnalysisGenerated(5, 100);
-      const raw2 = JSON.parse(fs.readFileSync(eventsFile, 'utf-8'));
-      expect(raw2).toHaveLength(2);
+      const lines2 = fs.readFileSync(eventsFile, 'utf-8').trim().split('\n').filter(l => l.trim());
+      expect(lines2).toHaveLength(2);
+      expect(JSON.parse(lines2[1]).type).toBe(TrackingEventType.ANALYSIS_GENERATED);
     });
   });
 });

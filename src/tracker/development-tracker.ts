@@ -386,25 +386,45 @@ export class DevelopmentTracker {
       ...partial,
     };
     this.events.push(event);
-    this.persistEvents();
+    this.appendEvent(event); // O(1) single-line append instead of O(n) full rewrite
     logger.debug(`[tracker] ${event.message}`);
   }
 
-  private persistEvents(): void {
+  // Append a single event as a newline-delimited JSON entry. O(1) per event.
+  private appendEvent(event: TrackingEvent): void {
     try {
-      fs.writeFileSync(this.eventsFile, JSON.stringify(this.events, null, 2), 'utf-8');
-    } catch (err) {
-      logger.error(`Failed to persist tracking events: ${err}`);
+      fs.appendFileSync(this.eventsFile, JSON.stringify(event) + '\n', 'utf-8');
+    } catch {
+      // Non-critical — events are already in memory; persisted at saveHistory() time
     }
   }
 
   private loadEvents(): void {
     if (!fs.existsSync(this.eventsFile)) return;
     try {
-      const raw = fs.readFileSync(this.eventsFile, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        this.events = parsed.map((e: any) => ({ ...e, timestamp: new Date(e.timestamp) }));
+      const raw = fs.readFileSync(this.eventsFile, 'utf-8').trim();
+      if (!raw) return;
+
+      if (raw.startsWith('[')) {
+        // Legacy format: full JSON array — parse and migrate to NDJSON
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          this.events = parsed.map((e: any) => ({ ...e, timestamp: new Date(e.timestamp) }));
+          fs.writeFileSync(
+            this.eventsFile,
+            this.events.map(e => JSON.stringify(e)).join('\n') + '\n',
+            'utf-8',
+          );
+        }
+      } else {
+        // NDJSON: one JSON object per line
+        this.events = raw
+          .split('\n')
+          .filter(l => l.trim())
+          .map(l => {
+            const e = JSON.parse(l);
+            return { ...e, timestamp: new Date(e.timestamp) } as TrackingEvent;
+          });
       }
     } catch {
       this.events = [];

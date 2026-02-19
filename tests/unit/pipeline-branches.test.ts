@@ -220,10 +220,10 @@ describe('PipelineOrchestrator branch coverage', () => {
   });
 
   describe('context optimization', () => {
-    it('loads project analysis when .cdm/project-analysis.md exists', () => {
-      const cdmDir = path.join(tempDir, '.cdm');
-      fs.mkdirSync(cdmDir, { recursive: true });
-      fs.writeFileSync(path.join(cdmDir, 'project-analysis.md'), '# Analysis\nProject analysis content', 'utf-8');
+    it('loads project analysis when .cdm/analysis/overview.md exists', async () => {
+      const analysisDir = path.join(tempDir, '.cdm', 'analysis');
+      fs.mkdirSync(analysisDir, { recursive: true });
+      fs.writeFileSync(path.join(analysisDir, 'overview.md'), '# Analysis\n## Entry Points\n- src/index.ts', 'utf-8');
 
       const freshStore = new ArtifactStore(tempDir);
       const freshContext = new ProjectContext(tempDir, 'AnalysisProject');
@@ -231,14 +231,24 @@ describe('PipelineOrchestrator branch coverage', () => {
         executionMode: 'simulation',
       });
 
-      const bridge = orchestrator.getBridge();
-      expect(bridge.getExecutionMode()).toBe('simulation');
+      const feature = freshContext.createFeature('Context Test', 'test feature');
+      const result = await orchestrator.runFeaturePipeline(feature, defaultOpts({
+        skipStages: [
+          PipelineStage.ARCHITECTURE_DESIGN, PipelineStage.UI_UX_DESIGN,
+          PipelineStage.TASK_BREAKDOWN, PipelineStage.IMPLEMENTATION,
+          PipelineStage.CODE_REVIEW, PipelineStage.TESTING,
+          PipelineStage.SECURITY_REVIEW, PipelineStage.DOCUMENTATION,
+          PipelineStage.DEPLOYMENT,
+        ],
+        maxRetries: 0,
+      }));
+      expect(result.contextOptimized).toBe(true);
     });
 
-    it('loads codestyle profile when .cdm/codestyle-profile.md exists', () => {
-      const cdmDir = path.join(tempDir, '.cdm');
-      fs.mkdirSync(cdmDir, { recursive: true });
-      fs.writeFileSync(path.join(cdmDir, 'codestyle-profile.md'), '# Style\nCode style content', 'utf-8');
+    it('loads codestyle profile when .cdm/analysis/codestyle.md exists', () => {
+      const analysisDir = path.join(tempDir, '.cdm', 'analysis');
+      fs.mkdirSync(analysisDir, { recursive: true });
+      fs.writeFileSync(path.join(analysisDir, 'codestyle.md'), '# Style\n## Naming Conventions\ncamelCase', 'utf-8');
 
       const freshStore = new ArtifactStore(tempDir);
       const freshContext = new ProjectContext(tempDir, 'StyleProject');
@@ -318,14 +328,13 @@ describe('PipelineOrchestrator branch coverage', () => {
   });
 
   describe('accessor methods', () => {
-    it('exposes bridge, tracker, registry, messageBus, transitionEngine', () => {
+    it('exposes bridge, tracker, registry, transitionEngine', () => {
       const orchestrator = new PipelineOrchestrator(context, artifactStore, config, {
         executionMode: 'simulation',
       });
       expect(orchestrator.getBridge()).toBeDefined();
       expect(orchestrator.getTracker()).toBeDefined();
       expect(orchestrator.getAgentRegistry()).toBeDefined();
-      expect(orchestrator.getMessageBus()).toBeDefined();
       expect(orchestrator.getTransitionEngine()).toBeDefined();
     });
   });

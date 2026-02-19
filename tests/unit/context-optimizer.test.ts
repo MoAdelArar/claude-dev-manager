@@ -70,26 +70,20 @@ This is the overview section for the project requirements.
 - SOC2 Type II certified`;
 
 const FULL_ANALYSIS = `# Codebase Analysis
-## Overview
-This is a TypeScript monorepo with 50 modules.
-## Modules
-- src/api — REST API layer
-- src/services — Business logic
-- src/db — Database access
-## Internal Dependency Graph
-api → services → db
-## External Dependencies
-- express: 4.18.0
-- pg: 8.11.0
 ## Entry Points
 - src/index.ts
 - src/cli.ts
+## Dependencies
+- express: 4.18.0
+- pg: 8.11.0
 ## Patterns
 - Repository pattern for data access
 - Middleware pattern for request handling
-## Test Structure
+## Testing
 - tests/unit — Unit tests
-- tests/integration — Integration tests`;
+- tests/integration — Integration tests
+## Module Dependencies
+api → services → db`;
 
 const FULL_PROFILE = `# Code Style Profile
 ## Architecture
@@ -207,32 +201,31 @@ describe('optimizeAnalysisForRole()', () => {
     expect(optimizeAnalysisForRole(null, AgentRole.PRODUCT_MANAGER)).toBeNull();
   });
 
-  it('should return filtered sections for PRODUCT_MANAGER (Overview, Entry Points)', () => {
+  it('should return filtered sections for PRODUCT_MANAGER (Entry Points only)', () => {
     const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.PRODUCT_MANAGER);
     expect(result).not.toBeNull();
-    expect(result).toContain('Overview');
     expect(result).toContain('Entry Points');
-    expect(result).not.toContain('## Modules');
-    expect(result).not.toContain('Internal Dependency Graph');
+    expect(result).not.toContain('## Module Dependencies');
     expect(result).not.toContain('## Patterns');
+    expect(result).not.toContain('## Testing');
   });
 
-  it('should return more sections for SENIOR_DEVELOPER (Modules, Dependency Graph, Patterns)', () => {
+  it('should return Patterns and Module Dependencies for SENIOR_DEVELOPER', () => {
     const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.SENIOR_DEVELOPER);
     expect(result).not.toBeNull();
-    expect(result).toContain('Overview');
-    expect(result).toContain('Modules');
-    expect(result).toContain('Internal Dependency Graph');
     expect(result).toContain('Patterns');
+    expect(result).toContain('Module Dependencies');
+    expect(result).not.toContain('## Testing');
+    expect(result).not.toContain('## Dependencies');
   });
 
-  it('should return Overview, External Deps, Entry Points for DEVOPS_ENGINEER', () => {
+  it('should return Dependencies and Entry Points for DEVOPS_ENGINEER', () => {
     const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.DEVOPS_ENGINEER);
     expect(result).not.toBeNull();
-    expect(result).toContain('Overview');
-    expect(result).toContain('External Dependencies');
+    expect(result).toContain('Dependencies');
     expect(result).toContain('Entry Points');
-    expect(result).not.toContain('## Modules');
+    expect(result).not.toContain('## Patterns');
+    expect(result).not.toContain('## Module Dependencies');
   });
 
   it('should return full analysis for unknown role', () => {

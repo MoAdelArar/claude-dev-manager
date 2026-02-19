@@ -282,7 +282,7 @@ export class PipelineOrchestrator {
     const stageConfig = getStageConfig(stage)!;
     const startTime = Date.now();
 
-    const inputArtifacts = this.gatherInputArtifacts(stageConfig.requiredArtifacts);
+    const inputArtifacts = this.gatherInputArtifacts(stageConfig.requiredArtifacts, feature.id);
 
     // ── Primary agent (always sequential — others depend on its output) ──────
     const task = this.createAgentTask(feature, stage, stageConfig.primaryAgent, inputArtifacts);
@@ -417,13 +417,13 @@ If the work meets standards, approve it. If changes are needed, detail what must
     };
   }
 
-  private gatherInputArtifacts(requiredTypes: import('../types').ArtifactType[]): Artifact[] {
+  private gatherInputArtifacts(requiredTypes: import('../types').ArtifactType[], featureId: string): Artifact[] {
     const artifacts: Artifact[] = [];
     for (const type of requiredTypes) {
-      const latest = this.artifactStore.getLatestByType(type);
-      if (latest) {
-        artifacts.push(latest);
-      }
+      // Prefer an artifact produced by the current feature; fall back to the most recent
+      const all = this.artifactStore.getByType(type); // sorted newest first
+      const artifact = all.find(a => a.metadata?.featureId === featureId) ?? all[0];
+      if (artifact) artifacts.push(artifact);
     }
     return artifacts;
   }

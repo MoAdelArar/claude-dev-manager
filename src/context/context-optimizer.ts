@@ -114,9 +114,13 @@ function extractSections(markdown: string, sectionNames: string[]): string {
       const level = headingMatch[1].length;
       const name = headingMatch[2].trim();
 
-      const matches = sectionNames.some(s =>
-        name.toLowerCase().includes(s.toLowerCase()),
-      );
+      const matches = sectionNames.some(s => {
+        const n = name.toLowerCase();
+        const t = s.toLowerCase();
+        // Exact match OR heading starts with the term followed by a space
+        // (e.g. 'Testing' matches 'Testing Conventions' but NOT 'Module Dependencies')
+        return n === t || n.startsWith(t + ' ');
+      });
 
       if (matches) {
         capturing = true;

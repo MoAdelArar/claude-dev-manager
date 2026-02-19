@@ -559,7 +559,7 @@ describe('ClaudeCodeBridge branch coverage', () => {
       const prompt = bridge.generateSubagentPrompt(task);
 
       expect(prompt).toContain('Agent Role');
-      expect(prompt).toContain('Current Task');
+      expect(prompt).toContain('## Task');
       expect(prompt.length).toBeGreaterThan(100);
     });
   });
