@@ -17,7 +17,7 @@ import logger, { addFileTransport, pipelineLog } from './utils/logger';
 import { ArtifactStore } from './workspace/artifact-store';
 import { ProjectContext } from './orchestrator/context';
 import { PipelineOrchestrator, type PipelineOptions, type PipelineResult } from './orchestrator/pipeline';
-import { ClaudeCodeBridge, type ExecutionMode } from './orchestrator/claude-code-bridge';
+import { ClaudeCodeBridge, type ExecutionMode, type ProjectSnapshot } from './orchestrator/claude-code-bridge';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 import { CodeStyleProfiler } from './analyzer/codestyle-profiler';
 import { DevelopmentTracker } from './tracker/development-tracker';
@@ -277,18 +277,8 @@ program
     saveConfig(projectPath, config);
     console.log(chalk.green('✅ Created cdm.config.yaml'));
 
-    const artifactStore = new ArtifactStore(projectPath);
-    const agentRegistry = new (require('./agents/index').AgentRegistry)(artifactStore);
-    const bridge = new ClaudeCodeBridge(agentRegistry, artifactStore, { projectPath });
-
-    bridge.writeAgentInstructionFiles();
-    console.log(chalk.green('✅ Generated agent instruction files in .cdm/agents/'));
-
-    const claudeMd = bridge.generateMainClaudeMd();
-    const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-    fs.writeFileSync(claudeMdPath, claudeMd, 'utf-8');
-    console.log(chalk.green('✅ Generated CLAUDE.md (references .cdm/ structure)'));
-
+    // ── Analyze the project BEFORE writing CDM files to .cdm/ ─────────────────
+    // This ensures the analysis only inspects the user's own code, not CDM-generated content.
     console.log(chalk.gray('\n  Running project analysis...'));
     const analyzer = new ProjectAnalyzer(projectPath);
     const analysis = await analyzer.analyze();
@@ -304,6 +294,61 @@ program
     const profilePath = path.join(projectPath, '.cdm', 'codestyle-profile.md');
     profiler.saveProfile(profilePath, profileMd);
     console.log(chalk.green(`✅ Generated .cdm/codestyle-profile.md (${codeStyleProfile.architecture.pattern})`));
+
+    // ── Build snapshot from analysis + profile + project config ──────────────
+    const topDirs = [...new Set(
+      analysis.modules.map(m => m.filePath.split('/')[0]).filter(Boolean),
+    )].filter(d => d !== '.' && !d.startsWith('.')) as string[];
+
+    const snapshot: ProjectSnapshot = {
+      projectName: analysis.projectName,
+      language: analysis.overview.language,
+      framework: analysis.overview.framework,
+      testFramework: analysis.overview.testFramework,
+      buildTool: analysis.overview.buildTool,
+      ciProvider: project.config.ciProvider,
+      deployTarget: project.config.deployTarget,
+      cloudProvider: String(project.config.cloudProvider),
+      naming: {
+        files: codeStyleProfile.naming.files,
+        directories: codeStyleProfile.naming.directories,
+        variables: codeStyleProfile.naming.variables,
+        functions: codeStyleProfile.naming.functions,
+        classes: codeStyleProfile.naming.classes,
+        testFiles: codeStyleProfile.naming.testFiles,
+      },
+      formatting: {
+        indentation: codeStyleProfile.formatting.indentation,
+        quotes: codeStyleProfile.formatting.quotes,
+        semicolons: codeStyleProfile.formatting.semicolons,
+      },
+      imports: {
+        moduleSystem: codeStyleProfile.imports.moduleSystem,
+        pathStyle: codeStyleProfile.imports.pathStyle,
+        nodeProtocol: codeStyleProfile.imports.nodeProtocol,
+      },
+      architecturePattern: codeStyleProfile.architecture.pattern,
+      architectureLayers: codeStyleProfile.architecture.layers,
+      entryPoints: analysis.entryPoints.slice(0, 5),
+      topDirs,
+      keyDeps: analysis.externalDeps.map(d => `${d.name}${d.purpose ? ` (${d.purpose})` : ''}`),
+      patterns: analysis.patterns,
+      testDirs: analysis.testStructure.dirs.slice(0, 4),
+      apiStyle: codeStyleProfile.api.style,
+    };
+
+    // ── Now write CDM agent files and CLAUDE.md ───────────────────────────────
+    const artifactStore = new ArtifactStore(projectPath);
+    const agentRegistry = new (require('./agents/index').AgentRegistry)(artifactStore);
+    const bridge = new ClaudeCodeBridge(agentRegistry, artifactStore, { projectPath });
+
+    bridge.writeAgentInstructionFiles(snapshot);
+    console.log(chalk.green('✅ Generated agent instruction files in .cdm/agents/'));
+
+    const claudeMd = bridge.generateMainClaudeMd();
+    const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
+    fs.writeFileSync(claudeMdPath, claudeMd, 'utf-8');
+    console.log(chalk.green('✅ Generated CLAUDE.md (references .cdm/ structure)'));
 
     console.log(chalk.bold.green('\n🎉 CDM initialized! Run `cdm start "your feature"` to begin.'));
     console.log(chalk.gray('   All CDM data is in .cdm/ — CLAUDE.md is the entry point.\n'));

@@ -155,33 +155,20 @@ export abstract class BaseAgent {
   }
 
   protected getOutputFormatInstructions(): string {
-    return `## Output Format
-Please structure your output as follows:
-
-### Summary
-A brief summary of what was accomplished.
-
-### Artifacts
-For each artifact produced, use the following format:
+    return `## Output
+Summary: what was accomplished.
+Artifacts — one block per artifact:
 ---ARTIFACT_START---
-Type: <artifact_type>
-Name: <artifact_name>
-Description: <artifact_description>
+Type: <type> | Name: <name> | Description: <desc>
 Content:
-<artifact_content>
+<content>
 ---ARTIFACT_END---
-
-### Issues Found
-For each issue identified, use the following format:
+Issues — one block per issue:
 ---ISSUE_START---
-Type: <issue_type>
-Severity: <critical|high|medium|low|info>
-Title: <issue_title>
-Description: <issue_description>
+Type: <type> | Severity: critical|high|medium|low|info | Title: <title>
+Description: <desc>
 ---ISSUE_END---
-
-### Recommendations
-Any recommendations for the next stage or other agents.`;
+Recommendations: notes for next stage or other agents.`;
   }
 
   prepareHandoff(

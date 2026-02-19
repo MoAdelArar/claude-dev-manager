@@ -22,6 +22,50 @@ import { v4 as uuidv4 } from 'uuid';
 
 export type ExecutionMode = 'claude-cli' | 'simulation';
 
+// ─── Project snapshot passed from cdm init ───────────────────────────────────
+
+export interface ProjectSnapshot {
+  // Stack
+  projectName: string;
+  language: string;
+  framework: string;
+  testFramework: string;
+  buildTool: string;
+  // Infrastructure
+  ciProvider: string;
+  deployTarget: string;
+  cloudProvider: string;
+  // Code conventions
+  naming: {
+    files: string;
+    directories: string;
+    variables: string;
+    functions: string;
+    classes: string;
+    testFiles: string;
+  };
+  formatting: {
+    indentation: string;
+    quotes: string;
+    semicolons: boolean;
+  };
+  imports: {
+    moduleSystem: string;
+    pathStyle: string;
+    nodeProtocol: boolean;
+  };
+  // Architecture
+  architecturePattern: string;
+  architectureLayers: string[];
+  // Project content
+  entryPoints: string[];
+  topDirs: string[];          // top-level source directories
+  keyDeps: string[];          // notable external dep names
+  patterns: string[];         // detected design patterns
+  testDirs: string[];
+  apiStyle: string;           // REST, GraphQL, tRPC, or 'none'
+}
+
 export interface ClaudeCodeOptions {
   model?: string;
   maxTokens?: number;
@@ -125,7 +169,7 @@ export class ClaudeCodeBridge {
     return agent.buildClaudeCodePrompt(task);
   }
 
-  writeAgentInstructionFiles(): void {
+  writeAgentInstructionFiles(snapshot?: ProjectSnapshot): void {
     const configs = this.agentRegistry.getAllConfigs();
     const agentsDir = path.join(this.options.projectPath, '.cdm', 'agents');
 
@@ -134,7 +178,7 @@ export class ClaudeCodeBridge {
     }
 
     for (const config of configs) {
-      const content = this.buildAgentInstructionFile(config);
+      const content = this.buildAgentInstructionFile(config, snapshot);
       const filePath = path.join(agentsDir, `${config.name}.md`);
       fs.writeFileSync(filePath, content, 'utf-8');
     }
@@ -349,7 +393,10 @@ export class ClaudeCodeBridge {
     return filePath;
   }
 
-  private buildAgentInstructionFile(config: import('../types').AgentConfig): string {
+  private buildAgentInstructionFile(
+    config: import('../types').AgentConfig,
+    snapshot?: ProjectSnapshot,
+  ): string {
     const sections: string[] = [];
 
     sections.push(`# ${config.title}\n`);
@@ -359,12 +406,19 @@ export class ClaudeCodeBridge {
     sections.push(`## Description\n${config.description}\n`);
     sections.push(`## System Prompt\n${config.systemPrompt}\n`);
 
+    if (snapshot) {
+      sections.push(this.buildProjectContextSection(config.role, snapshot));
+    }
+
     sections.push('## Capabilities\n');
     for (const cap of config.capabilities) {
+      const patterns = snapshot
+        ? this.tailorFilePatterns(cap.filePatterns, snapshot.language)
+        : cap.filePatterns;
       sections.push(`### ${cap.name}`);
       sections.push(cap.description);
       sections.push(`- Tools: ${cap.allowedTools.join(', ')}`);
-      sections.push(`- File patterns: ${cap.filePatterns.join(', ')}\n`);
+      sections.push(`- File patterns: ${patterns.join(', ')}\n`);
     }
 
     sections.push('## Input Artifacts\n');
@@ -376,6 +430,164 @@ export class ClaudeCodeBridge {
     sections.push(`\n## Token Budget: ${config.maxTokenBudget}`);
 
     return sections.join('\n');
+  }
+
+  // ── Project context injection ─────────────────────────────────────────────
+
+  private buildProjectContextSection(
+    role: import('../types').AgentRole,
+    s: ProjectSnapshot,
+  ): string {
+    const AgentRole = require('../types').AgentRole;
+    const lines: string[] = ['## Project Context\n'];
+
+    // ── Stack (all agents) ────────────────────────────────────────────────
+    lines.push('### Stack');
+    lines.push(`- **Project:** ${s.projectName}`);
+    lines.push(`- **Language:** ${s.language}`);
+    lines.push(`- **Framework:** ${s.framework}`);
+    if (s.testFramework !== 'unknown') lines.push(`- **Test framework:** ${s.testFramework}`);
+    if (s.buildTool !== 'unknown') lines.push(`- **Build tool:** ${s.buildTool}`);
+    lines.push('');
+
+    // ── Architecture (architect / manager / developer agents) ─────────────
+    const needsArch = [
+      AgentRole.SYSTEM_ARCHITECT, AgentRole.SOLUTIONS_ARCHITECT,
+      AgentRole.ENGINEERING_MANAGER, AgentRole.SENIOR_DEVELOPER,
+      AgentRole.JUNIOR_DEVELOPER, AgentRole.CODE_REVIEWER,
+      AgentRole.DOCUMENTATION_WRITER, AgentRole.PRODUCT_MANAGER,
+      AgentRole.BUSINESS_ANALYST,
+    ].includes(role);
+
+    if (needsArch && s.architecturePattern !== 'Flat / unknown') {
+      lines.push('### Architecture');
+      lines.push(`- **Pattern:** ${s.architecturePattern}`);
+      if (s.architectureLayers.length > 0) {
+        lines.push(`- **Layers:** ${s.architectureLayers.join(' → ')}`);
+      }
+      if (s.topDirs.length > 0) {
+        lines.push(`- **Source directories:** ${s.topDirs.slice(0, 6).join(', ')}`);
+      }
+      if (s.patterns.length > 0) {
+        lines.push(`- **Detected patterns:** ${s.patterns.slice(0, 4).join('; ')}`);
+      }
+      if (s.entryPoints.length > 0) {
+        lines.push(`- **Entry points:** ${s.entryPoints.slice(0, 3).join(', ')}`);
+      }
+      lines.push('');
+    }
+
+    // ── Code conventions (code-authoring agents) ──────────────────────────
+    const needsConventions = [
+      AgentRole.SENIOR_DEVELOPER, AgentRole.JUNIOR_DEVELOPER,
+      AgentRole.CODE_REVIEWER, AgentRole.QA_ENGINEER,
+      AgentRole.DATABASE_ENGINEER, AgentRole.SECURITY_ENGINEER,
+      AgentRole.PERFORMANCE_ENGINEER, AgentRole.ACCESSIBILITY_SPECIALIST,
+    ].includes(role);
+
+    if (needsConventions) {
+      lines.push('### Code Conventions');
+      lines.push(`- **Naming — files:** ${s.naming.files}`);
+      lines.push(`- **Naming — variables/functions:** ${s.naming.variables} / ${s.naming.functions}`);
+      lines.push(`- **Naming — classes:** ${s.naming.classes}`);
+      lines.push(`- **Naming — test files:** ${s.naming.testFiles}`);
+      lines.push(`- **Formatting:** ${s.formatting.indentation}, ${s.formatting.quotes} quotes, ${s.formatting.semicolons ? 'semicolons' : 'no semicolons'}`);
+      lines.push(`- **Imports:** ${s.imports.moduleSystem}`);
+      if (s.imports.pathStyle) lines.push(`- **Import paths:** ${s.imports.pathStyle}`);
+      if (s.imports.nodeProtocol) lines.push('- **node: protocol:** yes — use `node:fs` not `fs`');
+      lines.push('');
+    }
+
+    // ── Testing (QA + developers) ─────────────────────────────────────────
+    const needsTesting = [
+      AgentRole.QA_ENGINEER, AgentRole.SENIOR_DEVELOPER,
+      AgentRole.JUNIOR_DEVELOPER, AgentRole.CODE_REVIEWER,
+    ].includes(role);
+
+    if (needsTesting && s.testDirs.length > 0) {
+      lines.push('### Testing');
+      lines.push(`- **Test directories:** ${s.testDirs.slice(0, 4).join(', ')}`);
+      if (s.naming.testFiles) lines.push(`- **Test file naming:** ${s.naming.testFiles}`);
+      lines.push('');
+    }
+
+    // ── API / domain context ──────────────────────────────────────────────
+    const needsApi = [
+      AgentRole.SENIOR_DEVELOPER, AgentRole.SYSTEM_ARCHITECT,
+      AgentRole.SOLUTIONS_ARCHITECT, AgentRole.SECURITY_ENGINEER,
+      AgentRole.CODE_REVIEWER,
+    ].includes(role);
+
+    if (needsApi && s.apiStyle !== 'none') {
+      lines.push('### API');
+      lines.push(`- **Style:** ${s.apiStyle}`);
+      lines.push('');
+    }
+
+    // ── External dependencies (relevant agents) ───────────────────────────
+    const needsDeps = [
+      AgentRole.SYSTEM_ARCHITECT, AgentRole.SOLUTIONS_ARCHITECT,
+      AgentRole.SENIOR_DEVELOPER, AgentRole.DATABASE_ENGINEER,
+      AgentRole.SECURITY_ENGINEER, AgentRole.BUSINESS_ANALYST,
+      AgentRole.PERFORMANCE_ENGINEER,
+    ].includes(role);
+
+    if (needsDeps && s.keyDeps.length > 0) {
+      lines.push('### Key Dependencies');
+      lines.push(s.keyDeps.slice(0, 10).map(d => `- ${d}`).join('\n'));
+      lines.push('');
+    }
+
+    // ── Infrastructure (devops / sre / compliance agents) ─────────────────
+    const needsInfra = [
+      AgentRole.DEVOPS_ENGINEER, AgentRole.SRE_ENGINEER,
+      AgentRole.COMPLIANCE_OFFICER, AgentRole.SECURITY_ENGINEER,
+    ].includes(role);
+
+    if (needsInfra) {
+      const infra: string[] = [];
+      if (s.ciProvider !== 'unknown') infra.push(`- **CI:** ${s.ciProvider}`);
+      if (s.deployTarget !== 'unknown') infra.push(`- **Deploy target:** ${s.deployTarget}`);
+      if (s.cloudProvider !== 'unknown' && s.cloudProvider !== 'none') {
+        infra.push(`- **Cloud:** ${s.cloudProvider}`);
+      }
+      if (infra.length > 0) {
+        lines.push('### Infrastructure');
+        lines.push(infra.join('\n'));
+        lines.push('');
+      }
+    }
+
+    lines.push('> Read `.cdm/project-analysis.md` and `.cdm/codestyle-profile.md` for full detail.\n');
+
+    return lines.join('\n');
+  }
+
+  // ── File pattern adjustment by language ───────────────────────────────────
+
+  private tailorFilePatterns(genericPatterns: string[], language: string): string[] {
+    const langPatterns: Record<string, string[]> = {
+      typescript: ['src/**/*.ts', 'src/**/*.tsx', 'lib/**/*.ts', 'tests/**/*.ts'],
+      javascript: ['src/**/*.js', 'src/**/*.jsx', 'lib/**/*.js', 'tests/**/*.js'],
+      python: ['**/*.py', 'tests/**/*.py', 'src/**/*.py'],
+      go: ['**/*.go', 'cmd/**/*.go', 'pkg/**/*.go'],
+      rust: ['src/**/*.rs', 'tests/**/*.rs'],
+      ruby: ['**/*.rb', 'spec/**/*.rb', 'lib/**/*.rb'],
+      java: ['src/**/*.java', 'src/test/**/*.java'],
+      kotlin: ['src/**/*.kt', 'src/test/**/*.kt'],
+      csharp: ['**/*.cs', 'src/**/*.cs', 'tests/**/*.cs'],
+      php: ['src/**/*.php', 'tests/**/*.php'],
+    };
+
+    const lang = language.toLowerCase();
+    const replacement = langPatterns[lang];
+    if (!replacement) return genericPatterns;
+
+    // Keep any patterns that are already correct for this language;
+    // replace generic TS/JS patterns with language-appropriate ones.
+    const generic = new Set(['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.js', 'src/**/*.jsx', 'lib/**/*']);
+    const hasOnlyGeneric = genericPatterns.every(p => generic.has(p));
+    return hasOnlyGeneric ? replacement : genericPatterns;
   }
 
   parseArtifacts(output: string, task: AgentTask): Artifact[] {
