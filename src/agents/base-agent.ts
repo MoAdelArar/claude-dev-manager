@@ -124,7 +124,7 @@ export abstract class BaseAgent {
     sections.push(`## Role Description\n${this.config.description}`);
     sections.push(`## System Instructions\n${this.config.systemPrompt}`);
 
-    sections.push(`## Current Task\n**Title:** ${task.title}\n**Description:** ${task.description}\n**Stage:** ${task.stage}`);
+    sections.push(`## Task\n**${task.title}**\n${task.description}`);
 
     if (task.instructions) {
       sections.push(`## Detailed Instructions\n${task.instructions}`);

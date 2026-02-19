@@ -17,25 +17,31 @@ interface ContextSlice {
   needsFullArtifacts: boolean;
 }
 
+// Section names must match headings in .cdm/analysis/overview.md:
+//   ## Entry Points | ## Dependencies | ## Patterns | ## Testing | ## Module Dependencies
+// Section names must match headings in .cdm/analysis/codestyle.md (partial match, case-insensitive):
+//   ## Naming Conventions | ## Formatting | ## Import Style | ## TypeScript Usage |
+//   ## Error Handling | ## Architecture | ## Testing Conventions | ## API Conventions | ## Code Samples
+
 const ROLE_CONTEXT: Record<string, ContextSlice> = {
-  [Roles.PRODUCT_MANAGER]:        { analysisSection: ['Overview', 'Entry Points'],                               profileSections: ['Architecture'],                                         needsFullArtifacts: false },
-  [Roles.BUSINESS_ANALYST]:       { analysisSection: ['Overview', 'External Dependencies'],                      profileSections: ['Architecture'],                                         needsFullArtifacts: false },
-  [Roles.ENGINEERING_MANAGER]:    { analysisSection: ['Overview', 'Modules', 'Test Structure'],                  profileSections: ['Architecture', 'Testing Conventions'],                  needsFullArtifacts: false },
-  [Roles.SOLUTIONS_ARCHITECT]:    { analysisSection: ['Overview', 'External Dependencies', 'Entry Points'],      profileSections: ['Architecture', 'API Conventions'],                      needsFullArtifacts: false },
-  [Roles.SYSTEM_ARCHITECT]:       { analysisSection: ['Overview', 'Modules', 'Internal Dependency Graph', 'External Dependencies', 'Entry Points', 'Patterns'], profileSections: ['Architecture', 'Import Style', 'TypeScript Usage', 'API Conventions'], needsFullArtifacts: false },
-  [Roles.UI_DESIGNER]:            { analysisSection: ['Overview'],                                               profileSections: ['Naming Conventions'],                                   needsFullArtifacts: false },
-  [Roles.SENIOR_DEVELOPER]:       { analysisSection: ['Overview', 'Modules', 'Internal Dependency Graph', 'Patterns'], profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
-  [Roles.JUNIOR_DEVELOPER]:       { analysisSection: ['Overview', 'Modules', 'Patterns'],                       profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
-  [Roles.DATABASE_ENGINEER]:      { analysisSection: ['Overview', 'External Dependencies'],                      profileSections: ['Naming Conventions', 'TypeScript Usage'],               needsFullArtifacts: true },
-  [Roles.CODE_REVIEWER]:          { analysisSection: ['Overview', 'Modules', 'Patterns'],                        profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
-  [Roles.QA_ENGINEER]:            { analysisSection: ['Overview', 'Modules', 'Test Structure'],                  profileSections: ['Testing Conventions', 'Naming Conventions'],            needsFullArtifacts: false },
-  [Roles.PERFORMANCE_ENGINEER]:   { analysisSection: ['Overview', 'External Dependencies', 'Entry Points'],      profileSections: ['Architecture', 'API Conventions'],                      needsFullArtifacts: false },
-  [Roles.SECURITY_ENGINEER]:      { analysisSection: ['Overview', 'External Dependencies', 'Entry Points'],      profileSections: ['API Conventions', 'Import Style'],                      needsFullArtifacts: false },
-  [Roles.COMPLIANCE_OFFICER]:     { analysisSection: ['Overview', 'External Dependencies'],                      profileSections: ['API Conventions'],                                      needsFullArtifacts: false },
-  [Roles.ACCESSIBILITY_SPECIALIST]:{ analysisSection: ['Overview'],                                              profileSections: ['Naming Conventions'],                                   needsFullArtifacts: false },
-  [Roles.SRE_ENGINEER]:           { analysisSection: ['Overview', 'External Dependencies', 'Entry Points'],      profileSections: ['Architecture'],                                         needsFullArtifacts: false },
-  [Roles.DEVOPS_ENGINEER]:        { analysisSection: ['Overview', 'External Dependencies', 'Entry Points'],      profileSections: ['Architecture'],                                         needsFullArtifacts: false },
-  [Roles.DOCUMENTATION_WRITER]:   { analysisSection: ['Overview', 'Modules', 'External Dependencies', 'Entry Points', 'Patterns'], profileSections: ['Naming Conventions', 'Architecture', 'API Conventions'], needsFullArtifacts: false },
+  [Roles.PRODUCT_MANAGER]:        { analysisSection: ['Entry Points'],                                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
+  [Roles.BUSINESS_ANALYST]:       { analysisSection: ['Dependencies'],                                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
+  [Roles.ENGINEERING_MANAGER]:    { analysisSection: ['Testing'],                                                          profileSections: ['Architecture', 'Testing Conventions'],                                       needsFullArtifacts: false },
+  [Roles.SOLUTIONS_ARCHITECT]:    { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture', 'API Conventions'],                                           needsFullArtifacts: false },
+  [Roles.SYSTEM_ARCHITECT]:       { analysisSection: ['Dependencies', 'Entry Points', 'Patterns', 'Module Dependencies'],  profileSections: ['Architecture', 'Import Style', 'TypeScript Usage', 'API Conventions'],       needsFullArtifacts: false },
+  [Roles.UI_DESIGNER]:            { analysisSection: [],                                                                   profileSections: ['Naming Conventions'],                                                        needsFullArtifacts: false },
+  [Roles.SENIOR_DEVELOPER]:       { analysisSection: ['Patterns', 'Module Dependencies'],                                  profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
+  [Roles.JUNIOR_DEVELOPER]:       { analysisSection: ['Patterns'],                                                         profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
+  [Roles.DATABASE_ENGINEER]:      { analysisSection: ['Dependencies'],                                                     profileSections: ['Naming Conventions', 'TypeScript Usage'],                                    needsFullArtifacts: true },
+  [Roles.CODE_REVIEWER]:          { analysisSection: ['Patterns'],                                                         profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
+  [Roles.QA_ENGINEER]:            { analysisSection: ['Testing'],                                                          profileSections: ['Testing Conventions', 'Naming Conventions'],                                 needsFullArtifacts: false },
+  [Roles.PERFORMANCE_ENGINEER]:   { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture', 'API Conventions'],                                           needsFullArtifacts: false },
+  [Roles.SECURITY_ENGINEER]:      { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['API Conventions', 'Import Style'],                                           needsFullArtifacts: false },
+  [Roles.COMPLIANCE_OFFICER]:     { analysisSection: ['Dependencies'],                                                     profileSections: ['API Conventions'],                                                           needsFullArtifacts: false },
+  [Roles.ACCESSIBILITY_SPECIALIST]:{ analysisSection: [],                                                                  profileSections: ['Naming Conventions'],                                                        needsFullArtifacts: false },
+  [Roles.SRE_ENGINEER]:           { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
+  [Roles.DEVOPS_ENGINEER]:        { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
+  [Roles.DOCUMENTATION_WRITER]:   { analysisSection: ['Entry Points', 'Dependencies', 'Patterns'],                        profileSections: ['Naming Conventions', 'Architecture', 'API Conventions'],                      needsFullArtifacts: false },
 };
 
 // ─── Artifact summarizer ────────────────────────────────────────────────────

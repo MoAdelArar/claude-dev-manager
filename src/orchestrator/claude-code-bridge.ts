@@ -80,7 +80,6 @@ export class ClaudeCodeBridge {
   private agentRegistry: AgentRegistry;
   private artifactStore: ArtifactStore;
   private options: ClaudeCodeOptions;
-  private agentInstructionsDir: string;
   private executionMode: ExecutionMode;
   private claudeAvailable: boolean | null = null;
 
@@ -92,9 +91,7 @@ export class ClaudeCodeBridge {
     this.agentRegistry = agentRegistry;
     this.artifactStore = artifactStore;
     this.options = options;
-    this.agentInstructionsDir = path.join(options.projectPath, '.cdm', 'agent-prompts');
     this.executionMode = options.executionMode ?? 'claude-cli';
-    this.ensureDirectories();
   }
 
   getExecutionMode(): ExecutionMode {
@@ -121,10 +118,9 @@ export class ClaudeCodeBridge {
     agentLog(task.assignedTo, `Preparing task: ${task.title}`, task.stage);
 
     const prompt = agent.buildClaudeCodePrompt(task);
-    const promptFile = this.writePromptFile(task.assignedTo, task.id, prompt);
 
     try {
-      const output = await this.invokeClaudeCode(promptFile, task);
+      const output = await this.invokeClaudeCode(prompt, task);
 
       const artifacts = this.parseArtifacts(output, task);
       const issues = this.parseIssues(output, task);
@@ -143,7 +139,6 @@ export class ClaudeCodeBridge {
         durationMs: Date.now() - startTime,
         metadata: {
           taskId: task.id,
-          promptFile,
           executionMode: this.resolveExecutionMode(),
         },
       };
@@ -297,18 +292,17 @@ export class ClaudeCodeBridge {
     return this.isClaudeAvailable() ? 'claude-cli' : 'simulation';
   }
 
-  private async invokeClaudeCode(promptFile: string, task: AgentTask): Promise<string> {
+  private async invokeClaudeCode(prompt: string, task: AgentTask): Promise<string> {
     const mode = this.resolveExecutionMode();
 
     if (mode === 'claude-cli') {
-      return this.invokeClaudeCLI(promptFile, task);
+      return this.invokeClaudeCLI(prompt, task);
     }
 
     return this.invokeSimulation(task);
   }
 
-  private async invokeClaudeCLI(promptFile: string, task: AgentTask): Promise<string> {
-    const prompt = fs.readFileSync(promptFile, 'utf-8');
+  private async invokeClaudeCLI(prompt: string, task: AgentTask): Promise<string> {
     const claudeBin = this.options.claudePath ?? 'claude';
     const timeoutMs = (this.options.timeout ?? 300) * 1000;
 
@@ -388,15 +382,6 @@ export class ClaudeCodeBridge {
     return result.output;
   }
 
-  private writePromptFile(role: AgentRole, taskId: string, prompt: string): string {
-    const dir = path.join(this.agentInstructionsDir, role);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const filePath = path.join(dir, `${taskId}.md`);
-    fs.writeFileSync(filePath, prompt, 'utf-8');
-    return filePath;
-  }
 
   private buildAgentInstructionFile(
     config: import('../types').AgentConfig,
@@ -781,9 +766,4 @@ export class ClaudeCodeBridge {
     return Math.ceil(text.length / 4);
   }
 
-  private ensureDirectories(): void {
-    if (!fs.existsSync(this.agentInstructionsDir)) {
-      fs.mkdirSync(this.agentInstructionsDir, { recursive: true });
-    }
-  }
 }

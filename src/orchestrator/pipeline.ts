@@ -10,19 +10,16 @@ import {
   type AgentTask,
   type AgentResult,
   AgentStatus,
-  type AgentRole,
+  AgentRole,
   type Artifact,
   type Issue,
   MessagePriority,
-  MessageType,
   FeatureStatus,
 } from '../types';
 import { AgentRegistry } from '../agents/index';
 import { type ArtifactStore } from '../workspace/artifact-store';
-import { MessageBus } from '../communication/message-bus';
-import { HandoffProtocol } from '../communication/handoff';
-import { TransitionEngine, TransitionResult } from '../pipeline/transitions';
-import { getStageConfig, getAllStageConfigs, getStagesInOrder, getNextStage } from '../pipeline/stages';
+import { TransitionEngine } from '../pipeline/transitions';
+import { getStageConfig, getStagesInOrder } from '../pipeline/stages';
 import { type ProjectContext } from './context';
 import { ClaudeCodeBridge, type ClaudeCodeOptions } from './claude-code-bridge';
 import { DevelopmentTracker } from '../tracker/development-tracker';
@@ -56,17 +53,24 @@ export interface PipelineResult {
   contextOptimized: boolean;
 }
 
+// Roles that benefit from per-directory module context
+const CODE_ROLES = new Set<AgentRole>([
+  AgentRole.SENIOR_DEVELOPER,
+  AgentRole.JUNIOR_DEVELOPER,
+  AgentRole.CODE_REVIEWER,
+  AgentRole.DATABASE_ENGINEER,
+]);
+
 export class PipelineOrchestrator {
   private agentRegistry: AgentRegistry;
   private artifactStore: ArtifactStore;
-  private messageBus: MessageBus;
-  private handoffProtocol: HandoffProtocol;
   private transitionEngine: TransitionEngine;
   private projectContext: ProjectContext;
   private bridge: ClaudeCodeBridge;
   private config: CDMConfig;
   private projectAnalysis: string | null = null;
   private codeStyleProfile: string | null = null;
+  private entityFiles: Map<string, string> = new Map();
   private tracker: DevelopmentTracker;
 
   constructor(
@@ -80,8 +84,6 @@ export class PipelineOrchestrator {
     this.config = config;
 
     this.agentRegistry = new AgentRegistry(artifactStore);
-    this.messageBus = new MessageBus();
-    this.handoffProtocol = new HandoffProtocol(this.messageBus);
     this.transitionEngine = new TransitionEngine(artifactStore);
 
     const project = projectContext.getProject();
@@ -93,6 +95,7 @@ export class PipelineOrchestrator {
     this.tracker = new DevelopmentTracker(project.rootPath, project.id, project.name);
     this.projectAnalysis = this.loadProjectAnalysis();
     this.codeStyleProfile = this.loadCodeStyleProfile();
+    this.entityFiles = this.loadEntityFiles();
   }
 
   async runFeaturePipeline(
@@ -119,6 +122,15 @@ export class PipelineOrchestrator {
     if (result.contextOptimized) {
       pipelineLog('Context optimization: ON (role-aware filtering + artifact summarization)');
     }
+    if (this.entityFiles.size > 0) {
+      pipelineLog(`Entity context: ${this.entityFiles.size} module file(s) loaded`);
+    }
+
+    // Merge user-supplied skips with auto-inferred skips based on feature description
+    const effectiveSkipStages = new Set([
+      ...options.skipStages,
+      ...this.inferSkipStages(feature.description),
+    ]);
 
     this.tracker.recordPipelineStarted(feature.id, feature.name, this.bridge.getExecutionMode());
 
@@ -141,10 +153,11 @@ export class PipelineOrchestrator {
         }
       }
 
-      if (options.skipStages.includes(stage)) {
+      if (effectiveSkipStages.has(stage)) {
         if (this.transitionEngine.canSkipStage(stage)) {
-          stageLog(stage, 'Skipping stage (user request)');
-          this.tracker.recordStageSkipped(feature.id, stage, 'user request');
+          const reason = options.skipStages.includes(stage) ? 'user request' : 'auto-inferred';
+          stageLog(stage, `Skipping stage (${reason})`);
+          this.tracker.recordStageSkipped(feature.id, stage, reason);
           result.stagesSkipped.push(stage);
           continue;
         } else {
@@ -271,9 +284,8 @@ export class PipelineOrchestrator {
 
     const inputArtifacts = this.gatherInputArtifacts(stageConfig.requiredArtifacts);
 
-    const primaryAgent = this.agentRegistry.getAgent(stageConfig.primaryAgent);
+    // ── Primary agent (always sequential — others depend on its output) ──────
     const task = this.createAgentTask(feature, stage, stageConfig.primaryAgent, inputArtifacts);
-
     options.onAgentWork?.(stageConfig.primaryAgent, task);
     agentLog(stageConfig.primaryAgent, `Executing primary work for ${stageConfig.name}`, stage);
 
@@ -284,52 +296,52 @@ export class PipelineOrchestrator {
     const allIssues = [...primaryResult.issues];
     let totalTokens = primaryResult.tokensUsed;
 
-    for (const supportRole of stageConfig.supportingAgents) {
-      if (!this.isAgentEnabled(supportRole)) continue;
-
-      const supportTask = this.createAgentTask(
-        feature, stage, supportRole,
-        [...inputArtifacts, ...primaryResult.artifacts],
+    // ── Supporting agents (parallel — all receive primary's output) ──────────
+    const enabledSupport = stageConfig.supportingAgents.filter(r => this.isAgentEnabled(r));
+    if (enabledSupport.length > 0) {
+      const supportResults = await Promise.all(
+        enabledSupport.map(async (supportRole) => {
+          const supportTask = this.createAgentTask(
+            feature, stage, supportRole,
+            [...inputArtifacts, ...primaryResult.artifacts],
+          );
+          options.onAgentWork?.(supportRole, supportTask);
+          agentLog(supportRole, `Executing supporting work for ${stageConfig.name}`, stage);
+          const result = await this.bridge.executeAgentTask(supportTask);
+          this.tracker.recordAgentTask(feature.id, stage, supportRole, supportTask.title, result);
+          return result;
+        }),
       );
-
-      options.onAgentWork?.(supportRole, supportTask);
-      agentLog(supportRole, `Executing supporting work for ${stageConfig.name}`, stage);
-
-      const supportResult = await this.bridge.executeAgentTask(supportTask);
-      this.tracker.recordAgentTask(feature.id, stage, supportRole, supportTask.title, supportResult);
-      allArtifacts.push(...supportResult.artifacts);
-      allIssues.push(...supportResult.issues);
-      totalTokens += supportResult.tokensUsed;
-    }
-
-    let reviewApproved = stageConfig.reviewers.length === 0;
-    for (const reviewerRole of stageConfig.reviewers) {
-      if (!this.isAgentEnabled(reviewerRole)) {
-        reviewApproved = true;
-        continue;
-      }
-
-      const reviewTask = this.createReviewTask(
-        feature, stage, reviewerRole,
-        allArtifacts, primaryResult,
-      );
-
-      agentLog(reviewerRole, `Reviewing work for ${stageConfig.name}`, stage);
-
-      const reviewResult = await this.bridge.executeAgentTask(reviewTask);
-      this.tracker.recordAgentTask(feature.id, stage, reviewerRole, reviewTask.title, reviewResult);
-      allIssues.push(...reviewResult.issues);
-      totalTokens += reviewResult.tokensUsed;
-
-      const hasCritical = reviewResult.issues.some(
-        (i) => i.severity === 'critical',
-      );
-      if (!hasCritical) {
-        reviewApproved = true;
+      for (const r of supportResults) {
+        allArtifacts.push(...r.artifacts);
+        allIssues.push(...r.issues);
+        totalTokens += r.tokensUsed;
       }
     }
 
-    const stageResult: StageResult = {
+    // ── Reviewers (parallel — all review the same completed artifact set) ────
+    const enabledReviewers = stageConfig.reviewers.filter(r => this.isAgentEnabled(r));
+    let reviewApproved = enabledReviewers.length === 0;
+
+    if (enabledReviewers.length > 0) {
+      const reviewResults = await Promise.all(
+        enabledReviewers.map(async (reviewerRole) => {
+          const reviewTask = this.createReviewTask(feature, stage, reviewerRole, allArtifacts, primaryResult);
+          agentLog(reviewerRole, `Reviewing work for ${stageConfig.name}`, stage);
+          const result = await this.bridge.executeAgentTask(reviewTask);
+          this.tracker.recordAgentTask(feature.id, stage, reviewerRole, reviewTask.title, result);
+          return result;
+        }),
+      );
+      // Approved only when no reviewer raised a critical issue
+      reviewApproved = !reviewResults.some(r => r.issues.some(i => i.severity === 'critical'));
+      for (const r of reviewResults) {
+        allIssues.push(...r.issues);
+        totalTokens += r.tokensUsed;
+      }
+    }
+
+    return {
       stage,
       status: reviewApproved ? StageStatus.APPROVED : StageStatus.REVISION_NEEDED,
       startedAt: new Date(startTime),
@@ -346,23 +358,6 @@ export class PipelineOrchestrator {
         issuesResolved: 0,
       },
     };
-
-    if (stageResult.status === StageStatus.APPROVED) {
-      const nextStage = getNextStage(stage);
-      if (nextStage && nextStage !== PipelineStage.COMPLETED) {
-        const nextConfig = getStageConfig(nextStage);
-        if (nextConfig) {
-          const handoff = primaryAgent.prepareHandoff(
-            nextConfig.primaryAgent,
-            nextStage,
-            allArtifacts,
-          );
-          await this.handoffProtocol.executeHandoff(handoff);
-        }
-      }
-    }
-
-    return stageResult;
   }
 
   private createAgentTask(
@@ -440,40 +435,44 @@ If the work meets standards, approve it. If changes are needed, detail what must
   ): string {
     const instructions: string[] = [];
 
-    instructions.push(`You are working on feature: "${feature.name}"`);
-    instructions.push(`Feature description: ${feature.description}`);
-    instructions.push(`Current stage: ${stage}`);
-    instructions.push(`Your role: ${agentRole}`);
-
-    const project = this.projectContext.getProject();
-    instructions.push(`\nProject context:`);
-    instructions.push(`- Language: ${project.config.language}`);
-    instructions.push(`- Framework: ${project.config.framework}`);
-    instructions.push(`- Test framework: ${project.config.testFramework}`);
-    instructions.push(`- Build tool: ${project.config.buildTool}`);
-    instructions.push(`- Cloud provider: ${project.config.cloudProvider}`);
-
-    if (project.config.customInstructions) {
-      instructions.push(`\nCustom instructions: ${project.config.customInstructions}`);
+    // Feature goal — role/stage already appear in the prompt header built by BaseAgent
+    instructions.push(`Feature: "${feature.name}"`);
+    if (feature.description !== feature.name) {
+      instructions.push(`Description: ${feature.description}`);
     }
 
+    // Custom project instructions only (stack/framework already in agent system prompt)
+    const project = this.projectContext.getProject();
+    if (project.config.customInstructions) {
+      instructions.push(`\nProject-specific instructions: ${project.config.customInstructions}`);
+    }
+
+    // Role-filtered overview (entry points, deps, patterns, etc.)
     const filteredAnalysis = optimizeAnalysisForRole(this.projectAnalysis, agentRole);
     if (filteredAnalysis) {
-      instructions.push(`\n--- PROJECT ANALYSIS (filtered for your role) ---\n`);
-      instructions.push(filteredAnalysis);
-      instructions.push(`\n--- END PROJECT ANALYSIS ---`);
+      instructions.push(`\n--- PROJECT OVERVIEW ---\n${filteredAnalysis}\n--- END PROJECT OVERVIEW ---`);
     }
 
+    // Role-filtered code style conventions
     const filteredProfile = optimizeProfileForRole(this.codeStyleProfile, agentRole);
     if (filteredProfile) {
-      instructions.push(`\n--- CODE STYLE PROFILE (you MUST follow these conventions) ---\n`);
-      instructions.push(filteredProfile);
-      instructions.push(`\n--- END CODE STYLE PROFILE ---`);
+      instructions.push(`\n--- CODE CONVENTIONS (follow these) ---\n${filteredProfile}\n--- END CODE CONVENTIONS ---`);
     }
 
-    const previousResults = Array.from(feature.stageResults.entries());
+    // Per-directory module context for code-authoring roles
+    if (CODE_ROLES.has(agentRole) && this.entityFiles.size > 0) {
+      const relevant = this.selectEntityFiles(feature.description);
+      instructions.push(`\n--- MODULE CONTEXT ---`);
+      for (const [name, content] of relevant) {
+        instructions.push(`\n### ${name}\n${content}`);
+      }
+      instructions.push(`--- END MODULE CONTEXT ---`);
+    }
+
+    // Last 3 stage results — enough for continuity without bloat
+    const previousResults = Array.from(feature.stageResults.entries()).slice(-3);
     if (previousResults.length > 0) {
-      instructions.push(`\nPrevious stage results:`);
+      instructions.push(`\nPrevious stages:`);
       for (const [prevStage, result] of previousResults) {
         instructions.push(`- ${prevStage}: ${result.status} (${result.artifacts.length} artifacts, ${result.issues.length} issues)`);
       }
@@ -482,11 +481,87 @@ If the work meets standards, approve it. If changes are needed, detail what must
     return instructions.join('\n');
   }
 
+  // ── Entity files ─────────────────────────────────────────────────────────
+
+  private loadEntityFiles(): Map<string, string> {
+    const analysisDir = path.join(
+      this.projectContext.getProject().rootPath,
+      '.cdm', 'analysis',
+    );
+    const files = new Map<string, string>();
+    const skip = new Set(['overview.md', 'structure.md', 'codestyle.md']);
+
+    if (!fs.existsSync(analysisDir)) return files;
+
+    try {
+      for (const name of fs.readdirSync(analysisDir)) {
+        if (!name.endsWith('.md') || skip.has(name)) continue;
+        const content = fs.readFileSync(path.join(analysisDir, name), 'utf-8');
+        files.set(name, content);
+      }
+      if (files.size > 0) {
+        pipelineLog(`Loaded ${files.size} entity file(s) from .cdm/analysis/`);
+      }
+    } catch {
+      pipelineLog('Failed to read entity files from .cdm/analysis/');
+    }
+
+    return files;
+  }
+
+  // Returns entity files whose name matches keywords in the feature description.
+  // Falls back to all entity files when there are no keyword matches.
+  private selectEntityFiles(featureDescription: string): Map<string, string> {
+    const words = featureDescription.toLowerCase().match(/\b\w{4,}\b/g) ?? [];
+    const matched = new Map<string, string>();
+
+    for (const [name, content] of this.entityFiles) {
+      const entityName = name.replace('.md', '').toLowerCase();
+      if (words.some(w => entityName.includes(w) || w.includes(entityName))) {
+        matched.set(name, content);
+      }
+    }
+
+    return matched.size > 0 ? matched : new Map(this.entityFiles);
+  }
+
+  // ── Smart stage inference ─────────────────────────────────────────────────
+
+  // Infers skippable stages from the feature description without touching
+  // mandatory stages (canBeSkipped: false). Only conservative, safe skips.
+  private inferSkipStages(description: string): PipelineStage[] {
+    const desc = description.toLowerCase();
+    const toSkip: PipelineStage[] = [];
+
+    const hasFrontend = /\b(ui|ux|design|button|page|component|screen|layout|css|style|modal|form|animation|responsive|visual|frontend|front-end)\b/.test(desc);
+    const hasBackend  = /\b(api|endpoint|database|schema|migration|query|service|model|cache|queue|job|webhook|server|backend|back-end|auth|permission|role)\b/.test(desc);
+    const isSimple    = /\b(fix|typo|rename|refactor|cleanup|clean[ -]up|format|lint|minor|tweak|wording|copy)\b/.test(desc);
+
+    // Pure backend feature — no UI work expected
+    if (hasBackend && !hasFrontend) {
+      toSkip.push(PipelineStage.UI_UX_DESIGN);
+    }
+
+    // Simple non-security-sensitive changes — security review adds no value
+    if (isSimple && !hasBackend) {
+      toSkip.push(PipelineStage.SECURITY_REVIEW);
+    }
+
+    if (toSkip.length > 0) {
+      pipelineLog(`Auto-skipping: ${toSkip.join(', ')} (inferred from feature description)`);
+    }
+
+    return toSkip;
+  }
+
+  // ── Analysis loaders ──────────────────────────────────────────────────────
+
   private loadProjectAnalysis(): string | null {
     const analysisPath = path.join(
       this.projectContext.getProject().rootPath,
       '.cdm',
-      'project-analysis.md',
+      'analysis',
+      'overview.md',
     );
 
     if (fs.existsSync(analysisPath)) {
@@ -506,7 +581,8 @@ If the work meets standards, approve it. If changes are needed, detail what must
     const profilePath = path.join(
       this.projectContext.getProject().rootPath,
       '.cdm',
-      'codestyle-profile.md',
+      'analysis',
+      'codestyle.md',
     );
 
     if (fs.existsSync(profilePath)) {
@@ -573,10 +649,6 @@ If the work meets standards, approve it. If changes are needed, detail what must
 
   getAgentRegistry(): AgentRegistry {
     return this.agentRegistry;
-  }
-
-  getMessageBus(): MessageBus {
-    return this.messageBus;
   }
 
   getTransitionEngine(): TransitionEngine {
