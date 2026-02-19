@@ -23,28 +23,10 @@ Thumbs.db
 
 # Environment
 .env
-!.env.example
+.env.*
 
 # Coverage
 coverage/
 
 # npm
 npm-debug.log*
-
-# Platform: Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-
-# Platform: Android
-platform/android/.gradle/
-platform/android/build/
-platform/android/app/build/
-platform/android/local.properties
-*.apk
-*.aab
-
-# Platform: Web
-platform/web/node_modules/
-platform/web/dist/
