@@ -275,6 +275,122 @@ export class ProjectAnalyzer {
     fs.writeFileSync(outputPath, markdown, 'utf-8');
   }
 
+  // ── Folder-based output ──────────────────────────────────────────────
+
+  generateAnalysisFiles(analysis: ProjectAnalysis): Map<string, string> {
+    const files = new Map<string, string>();
+    files.set('overview.md', this.generateOverviewFile(analysis));
+    files.set('structure.md', this.generateStructureFile(analysis));
+    const grouped = this.groupByDirectory(analysis.modules);
+    for (const [dir, mods] of Object.entries(grouped)) {
+      files.set(this.dirToFilename(dir), this.generateEntityFile(dir, mods));
+    }
+    return files;
+  }
+
+  saveAnalysisFolder(outputDir: string, files: Map<string, string>): void {
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+    for (const [name, content] of files) {
+      fs.writeFileSync(path.join(outputDir, name), content, 'utf-8');
+    }
+  }
+
+  private generateOverviewFile(analysis: ProjectAnalysis): string {
+    const s: string[] = [];
+    const o = analysis.overview;
+    s.push(`# ${analysis.projectName}`);
+    s.push(`> Generated: ${analysis.generatedAt}\n`);
+    s.push(`**Language:** ${o.language} · **Framework:** ${o.framework}`);
+    s.push(`**Build:** ${o.buildTool} · **Tests:** ${o.testFramework}`);
+    s.push(`**Size:** ${o.totalSourceFiles} source + ${o.totalTestFiles} test files, ${o.totalLines.toLocaleString()} lines\n`);
+
+    if (analysis.entryPoints.length > 0) {
+      s.push('## Entry Points');
+      for (const ep of analysis.entryPoints) s.push(`- \`${ep}\``);
+      s.push('');
+    }
+
+    if (analysis.externalDeps.length > 0) {
+      s.push('## Dependencies');
+      for (const dep of analysis.externalDeps) {
+        const purpose = dep.purpose ? ` — ${dep.purpose}` : '';
+        s.push(`- **${dep.name}**${purpose}`);
+      }
+      s.push('');
+    }
+
+    if (analysis.patterns.length > 0) {
+      s.push('## Patterns');
+      for (const p of analysis.patterns) s.push(`- ${p}`);
+      s.push('');
+    }
+
+    const ts = analysis.testStructure;
+    if (ts.fileCount > 0 || ts.frameworks.length > 0) {
+      s.push('## Testing');
+      if (ts.frameworks.length > 0) s.push(`- Frameworks: ${ts.frameworks.join(', ')}`);
+      if (ts.fileCount > 0) s.push(`- ${ts.fileCount} test files in: ${ts.dirs.join(', ') || 'root'}`);
+      s.push('');
+    }
+
+    if (analysis.dependencyGraph.length > 0) {
+      s.push('## Module Dependencies');
+      const adjMap = new Map<string, string[]>();
+      for (const e of analysis.dependencyGraph) {
+        if (!adjMap.has(e.from)) adjMap.set(e.from, []);
+        adjMap.get(e.from)!.push(e.to);
+      }
+      for (const [from, tos] of adjMap) {
+        s.push(`- \`${from}\` → ${tos.map(t => `\`${t}\``).join(', ')}`);
+      }
+    }
+
+    return s.join('\n');
+  }
+
+  private generateStructureFile(analysis: ProjectAnalysis): string {
+    const s: string[] = [];
+    s.push(`# Structure: ${analysis.projectName}\n`);
+    s.push('```');
+    this.renderTreeToLines(analysis.fileTree, s, '');
+    s.push('```');
+    return s.join('\n');
+  }
+
+  private generateEntityFile(dir: string, mods: ModuleSummary[]): string {
+    const s: string[] = [];
+    const label = dir === '.' ? '(root)' : `${dir}/`;
+    s.push(`# ${label}\n`);
+
+    for (const mod of mods) {
+      const filename = path.basename(mod.filePath);
+      s.push(`## ${filename} (${mod.lines} lines)`);
+      if (mod.description) s.push(mod.description);
+      if (mod.exports.length > 0) {
+        const shown = mod.exports.slice(0, 6);
+        const rest = mod.exports.length > 6 ? ` + ${mod.exports.length - 6} more` : '';
+        const exportStr = shown.map(e => {
+          const sig = e.signature ? ` \`${e.signature}\`` : '';
+          return `${e.kind} **${e.name}**${sig}`;
+        }).join(' · ');
+        s.push(`Exports: ${exportStr}${rest}`);
+      }
+      const localImports = mod.imports.filter(i => i.startsWith('.'));
+      if (localImports.length > 0) {
+        s.push(`Uses: ${localImports.slice(0, 5).join(', ')}`);
+      }
+      s.push('');
+    }
+
+    return s.join('\n');
+  }
+
+  private dirToFilename(dir: string): string {
+    if (dir === '.') return 'root.md';
+    const parts = dir.replace(/\\/g, '/').split('/');
+    return `${parts[parts.length - 1]}.md`;
+  }
+
   // ── Overview ────────────────────────────────────────────────────────────
 
   private buildOverview(): ProjectOverview & { projectName: string } {

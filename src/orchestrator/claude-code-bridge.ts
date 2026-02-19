@@ -198,8 +198,11 @@ export class ClaudeCodeBridge {
     s.push('```');
     s.push('.cdm/');
     s.push('├── project.json              # Project metadata, detected language/framework/cloud/CI');
-    s.push('├── project-analysis.md       # Full project analysis: modules, exports, deps, patterns');
-    s.push('├── codestyle-profile.md      # Code style: naming, formatting, architecture, samples');
+    s.push('├── analysis/                 # Project analysis — split by entity (read what you need)');
+    s.push('│   ├── overview.md           # Stack, dependencies, patterns, entry points');
+    s.push('│   ├── structure.md          # Project file tree');
+    s.push('│   ├── codestyle.md          # Naming, formatting, imports, code samples');
+    s.push('│   └── <entity>.md           # One file per source directory (agents.md, api.md, ...)');
     s.push('├── agents/                   # Agent role definitions and system prompts');
     s.push('│   ├── product-manager.md');
     s.push('│   ├── senior-developer.md');
@@ -210,9 +213,10 @@ export class ClaudeCodeBridge {
     s.push('```\n');
 
     s.push('### Key files to read BEFORE making changes:\n');
-    s.push('1. **`.cdm/project-analysis.md`** — Understand every module, dependency, and pattern in the codebase');
-    s.push('2. **`.cdm/codestyle-profile.md`** — Follow the existing naming, formatting, and architecture conventions');
-    s.push('3. **`.cdm/project.json`** — Project language, framework, build tool, cloud provider, CI/CD\n');
+    s.push('1. **`.cdm/analysis/overview.md`** — Project stack, dependencies, architecture, and design patterns');
+    s.push('2. **`.cdm/analysis/codestyle.md`** — Follow the existing naming, formatting, and import conventions');
+    s.push('3. **`.cdm/analysis/<entity>.md`** — Understand specific modules before modifying them');
+    s.push('4. **`.cdm/project.json`** — Project language, framework, build tool, cloud provider, CI/CD\n');
 
     // ── Team ───────────────────────────────────────────────────────────
     s.push('## Agent Team\n');
@@ -257,10 +261,11 @@ export class ClaudeCodeBridge {
     s.push('## Agent Delegation Protocol\n');
     s.push('When delegating work to a subagent:\n');
     s.push('1. Read the agent\'s definition from `.cdm/agents/<agent-name>.md`');
-    s.push('2. Include the project context from `.cdm/project-analysis.md`');
-    s.push('3. Include the code style rules from `.cdm/codestyle-profile.md`');
-    s.push('4. Provide all relevant input artifacts and clear output expectations');
-    s.push('5. Task prompts are saved to `.cdm/agent-prompts/` for traceability\n');
+    s.push('2. Include the project context from `.cdm/analysis/overview.md`');
+    s.push('3. Include the code style rules from `.cdm/analysis/codestyle.md`');
+    s.push('4. Read `.cdm/analysis/<entity>.md` for the relevant source directories');
+    s.push('5. Provide all relevant input artifacts and clear output expectations');
+    s.push('6. Task prompts are saved to `.cdm/agent-prompts/` for traceability\n');
 
     // ── Artifact format ────────────────────────────────────────────────
     s.push('## Artifact Format\n');
@@ -558,7 +563,7 @@ export class ClaudeCodeBridge {
       }
     }
 
-    lines.push('> Read `.cdm/project-analysis.md` and `.cdm/codestyle-profile.md` for full detail.\n');
+    lines.push('> Read `.cdm/analysis/overview.md` for project context, `.cdm/analysis/codestyle.md` for conventions, and the relevant `.cdm/analysis/<entity>.md` for module details.\n');
 
     return lines.join('\n');
   }

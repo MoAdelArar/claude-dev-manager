@@ -152,8 +152,8 @@ program
       return;
     }
 
-    const analysisPath = path.join(projectPath, '.cdm', 'project-analysis.md');
-    if (!fs.existsSync(analysisPath)) {
+    const analysisDir = path.join(projectPath, '.cdm', 'analysis');
+    if (!fs.existsSync(analysisDir)) {
       console.log(chalk.yellow('Tip: Run `cdm analyze` first to generate a project analysis for smarter agent context.\n'));
     }
 
@@ -282,18 +282,17 @@ program
     console.log(chalk.gray('\n  Running project analysis...'));
     const analyzer = new ProjectAnalyzer(projectPath);
     const analysis = await analyzer.analyze();
-    const markdown = analyzer.generateMarkdown(analysis);
-    const analysisPath = path.join(projectPath, '.cdm', 'project-analysis.md');
-    analyzer.saveAnalysis(analysisPath, markdown);
-    console.log(chalk.green(`✅ Generated .cdm/project-analysis.md (${analysis.modules.length} modules, ${analysis.overview.totalLines.toLocaleString()} lines)`));
+    const analysisDir = path.join(projectPath, '.cdm', 'analysis');
+    const analysisFiles = analyzer.generateAnalysisFiles(analysis);
+    analyzer.saveAnalysisFolder(analysisDir, analysisFiles);
+    console.log(chalk.green(`✅ Generated .cdm/analysis/ (${analysisFiles.size} files · ${analysis.modules.length} modules · ${analysis.overview.totalLines.toLocaleString()} lines)`));
 
     console.log(chalk.gray('  Profiling code style...'));
     const profiler = new CodeStyleProfiler(projectPath);
     const codeStyleProfile = await profiler.profile();
     const profileMd = profiler.generateMarkdown(codeStyleProfile);
-    const profilePath = path.join(projectPath, '.cdm', 'codestyle-profile.md');
-    profiler.saveProfile(profilePath, profileMd);
-    console.log(chalk.green(`✅ Generated .cdm/codestyle-profile.md (${codeStyleProfile.architecture.pattern})`));
+    profiler.saveProfile(path.join(analysisDir, 'codestyle.md'), profileMd);
+    console.log(chalk.green(`✅ Generated .cdm/analysis/codestyle.md (${codeStyleProfile.architecture.pattern})`));
 
     // ── Build snapshot from analysis + profile + project config ──────────────
     const topDirs = [...new Set(
@@ -618,14 +617,14 @@ program
 
 program
   .command('analyze')
-  .description('Analyze the target project and generate a structured analysis file for agents')
+  .description('Analyze the target project and generate structured analysis files for agents')
   .option('--project <path>', 'Project path to analyze', process.cwd())
-  .option('-o, --output <path>', 'Output path for analysis file (default: .cdm/project-analysis.md)')
+  .option('-o, --output <dir>', 'Output directory for analysis files (default: .cdm/analysis/)')
   .option('--json', 'Also output raw JSON analysis', false)
   .action(async (opts: any) => {
     const projectPath = opts.project;
     guardSelfInit(projectPath);
-    const outputPath = opts.output ?? path.join(projectPath, '.cdm', 'project-analysis.md');
+    const outputDir = opts.output ?? path.join(projectPath, '.cdm', 'analysis');
 
     const spinner = ora();
     spinner.start(chalk.cyan('Analyzing project...'));
@@ -633,18 +632,18 @@ program
     try {
       const analyzer = new ProjectAnalyzer(projectPath);
       const analysis = await analyzer.analyze();
-      const markdown = analyzer.generateMarkdown(analysis);
+      const analysisFiles = analyzer.generateAnalysisFiles(analysis);
 
-      analyzer.saveAnalysis(outputPath, markdown);
-      spinner.succeed(chalk.green(`Analysis complete`));
+      analyzer.saveAnalysisFolder(outputDir, analysisFiles);
+      spinner.succeed(chalk.green('Analysis complete'));
 
       if (opts.json) {
-        const jsonPath = outputPath.replace(/\.md$/, '.json');
+        const jsonPath = path.join(outputDir, 'analysis.json');
         fs.writeFileSync(jsonPath, JSON.stringify(analysis, null, 2), 'utf-8');
         console.log(chalk.green(`  JSON:     ${jsonPath}`));
       }
 
-      console.log(chalk.green(`  Output:   ${outputPath}`));
+      console.log(chalk.green(`  Output:   ${outputDir}/ (${analysisFiles.size} files)`));
       console.log(chalk.white(`  Modules:  ${analysis.modules.length}`));
       console.log(chalk.white(`  Files:    ${analysis.overview.totalSourceFiles} source, ${analysis.overview.totalTestFiles} test`));
       console.log(chalk.white(`  Lines:    ${analysis.overview.totalLines.toLocaleString()}`));
@@ -654,11 +653,10 @@ program
       const profiler = new CodeStyleProfiler(projectPath);
       const styleProfile = await profiler.profile();
       const profileMd = profiler.generateMarkdown(styleProfile);
-      const profilePath = path.join(projectPath, '.cdm', 'codestyle-profile.md');
-      profiler.saveProfile(profilePath, profileMd);
-      spinner.succeed(chalk.green(`Code style profile generated`));
+      profiler.saveProfile(path.join(outputDir, 'codestyle.md'), profileMd);
+      spinner.succeed(chalk.green('Code style profile generated'));
 
-      console.log(chalk.green(`  Profile:  ${profilePath}`));
+      console.log(chalk.green(`  Codestyle: ${outputDir}/codestyle.md`));
       console.log(chalk.white(`  Arch:     ${styleProfile.architecture.pattern}`));
       console.log(chalk.white(`  Style:    ${styleProfile.formatting.indentation}, ${styleProfile.formatting.quotes} quotes, ${styleProfile.formatting.semicolons ? 'semicolons' : 'no semicolons'}`));
       console.log(chalk.white(`  Naming:   files=${styleProfile.naming.files}, vars=${styleProfile.naming.variables}`));
