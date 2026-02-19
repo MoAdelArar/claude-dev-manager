@@ -5,6 +5,7 @@ dist/
 
 # CDM generated files (created by `cdm init` / `cdm analyze` on target projects)
 .cdm/
+.claude/
 /agents/
 cdm.config.yaml
 cdm.config.yml
