@@ -10,15 +10,15 @@ import {
 } from '../types';
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
-  language: 'typescript',
-  framework: 'node',
-  testFramework: 'jest',
-  buildTool: 'npm',
-  ciProvider: 'github-actions',
-  deployTarget: 'docker',
-  cloudProvider: CloudProvider.AWS,
+  language: 'auto',
+  framework: 'auto',
+  testFramework: 'auto',
+  buildTool: 'auto',
+  ciProvider: 'auto',
+  deployTarget: 'auto',
+  cloudProvider: CloudProvider.NONE,
   codeStyle: 'standard',
-  branchStrategy: 'gitflow',
+  branchStrategy: 'auto',
   customInstructions: '',
 };
 

@@ -467,7 +467,7 @@ describe('ClaudeCodeBridge — E2E', () => {
 
     bridge.writeAgentInstructionFiles();
 
-    const agentsDir = path.join(projectDir, 'agents');
+    const agentsDir = path.join(projectDir, '.cdm', 'agents');
     expect(fs.existsSync(agentsDir)).toBe(true);
     const files = fs.readdirSync(agentsDir);
     expect(files.length).toBeGreaterThanOrEqual(11);
@@ -487,7 +487,7 @@ describe('ClaudeCodeBridge — E2E', () => {
     });
 
     const claudeMd = bridge.generateMainClaudeMd();
-    expect(claudeMd).toContain('Team Structure');
+    expect(claudeMd).toContain('Agent Team');
     expect(claudeMd).toContain('Development Pipeline');
     expect(claudeMd).toContain('Requirements Gathering');
     expect(claudeMd).toContain('ARTIFACT_START');
@@ -660,7 +660,7 @@ describe('Config Management — E2E', () => {
 
   it('should return default config when no file exists', () => {
     const config = loadConfig(projectDir);
-    expect(config.project.language).toBe('typescript');
+    expect(config.project.language).toBe('auto');
     expect(config.pipeline.maxRetries).toBe(2);
     expect(config.agents[AgentRole.PRODUCT_MANAGER].enabled).toBe(true);
   });
@@ -685,7 +685,7 @@ describe('Config Management — E2E', () => {
     const loaded = loadConfig(projectDir);
     expect(loaded.pipeline.maxRetries).toBe(10);
     expect(loaded.pipeline.timeoutMinutes).toBe(30);
-    expect(loaded.project.language).toBe('typescript');
+    expect(loaded.project.language).toBe('auto');
   });
 });
 

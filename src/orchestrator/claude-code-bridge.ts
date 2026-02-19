@@ -127,85 +127,120 @@ export class ClaudeCodeBridge {
 
   writeAgentInstructionFiles(): void {
     const configs = this.agentRegistry.getAllConfigs();
-    const instructionsDir = path.join(this.options.projectPath, 'agents');
+    const agentsDir = path.join(this.options.projectPath, '.cdm', 'agents');
 
-    if (!fs.existsSync(instructionsDir)) {
-      fs.mkdirSync(instructionsDir, { recursive: true });
+    if (!fs.existsSync(agentsDir)) {
+      fs.mkdirSync(agentsDir, { recursive: true });
     }
 
     for (const config of configs) {
       const content = this.buildAgentInstructionFile(config);
-      const filePath = path.join(instructionsDir, `${config.name}.md`);
+      const filePath = path.join(agentsDir, `${config.name}.md`);
       fs.writeFileSync(filePath, content, 'utf-8');
     }
 
-    logger.info(`Generated ${configs.length} agent instruction files`);
+    logger.info(`Generated ${configs.length} agent instruction files in .cdm/agents/`);
   }
 
   generateMainClaudeMd(): string {
-    const sections: string[] = [];
+    const s: string[] = [];
 
-    sections.push('# Claude Dev Manager - Project Instructions\n');
-    sections.push('This project uses a multi-agent development management system.');
-    sections.push('Each agent has a specific role in the software development lifecycle.\n');
+    s.push('# Claude Dev Manager — Project Instructions\n');
+    s.push('This project is managed by CDM, a multi-agent development system.');
+    s.push('All CDM data lives in the `.cdm/` folder. Read these files before modifying the codebase.\n');
 
-    sections.push('## Team Structure\n');
-    sections.push('```');
-    sections.push('Product Manager (top level)');
-    sections.push('├── Engineering Manager');
-    sections.push('│   ├── Senior Developer');
-    sections.push('│   │   └── Junior Developer');
-    sections.push('│   ├── Code Reviewer');
-    sections.push('│   ├── QA Engineer');
-    sections.push('│   ├── Security Engineer');
-    sections.push('│   ├── DevOps Engineer');
-    sections.push('│   └── Documentation Writer');
-    sections.push('└── UI/UX Designer');
-    sections.push('```\n');
+    // ── .cdm structure ─────────────────────────────────────────────────
+    s.push('## `.cdm/` Folder Structure\n');
+    s.push('```');
+    s.push('.cdm/');
+    s.push('├── project.json              # Project metadata, detected language/framework/cloud/CI');
+    s.push('├── project-analysis.md       # Full project analysis: modules, exports, deps, patterns');
+    s.push('├── codestyle-profile.md      # Code style: naming, formatting, architecture, samples');
+    s.push('├── agents/                   # Agent role definitions and system prompts');
+    s.push('│   ├── product-manager.md');
+    s.push('│   ├── senior-developer.md');
+    s.push('│   └── ... (one per agent)');
+    s.push('├── agent-prompts/            # Runtime task prompts (generated during pipeline)');
+    s.push('├── features/                 # Feature state files (one JSON per feature)');
+    s.push('└── artifacts/                # Produced artifacts from pipeline stages');
+    s.push('```\n');
 
-    sections.push('## Development Pipeline\n');
-    sections.push('Features go through these stages in order:\n');
-    sections.push('1. **Requirements Gathering** → Product Manager');
-    sections.push('2. **Architecture Design** → System Architect');
-    sections.push('3. **UI/UX Design** → UI Designer');
-    sections.push('4. **Task Breakdown** → Engineering Manager');
-    sections.push('5. **Implementation** → Senior Developer + Junior Developer');
-    sections.push('6. **Code Review** → Code Reviewer');
-    sections.push('7. **Testing** → QA Engineer');
-    sections.push('8. **Security Review** → Security Engineer');
-    sections.push('9. **Documentation** → Documentation Writer');
-    sections.push('10. **Deployment** → DevOps Engineer\n');
+    s.push('### Key files to read BEFORE making changes:\n');
+    s.push('1. **`.cdm/project-analysis.md`** — Understand every module, dependency, and pattern in the codebase');
+    s.push('2. **`.cdm/codestyle-profile.md`** — Follow the existing naming, formatting, and architecture conventions');
+    s.push('3. **`.cdm/project.json`** — Project language, framework, build tool, cloud provider, CI/CD\n');
 
-    sections.push('## Agent Delegation Protocol\n');
-    sections.push('When delegating work to a subagent, use the Task tool with:');
-    sections.push('- The agent\'s specific system prompt from the agents/ directory');
-    sections.push('- All relevant input artifacts');
-    sections.push('- Clear instructions about expected outputs');
-    sections.push('- Any constraints or guidelines\n');
+    // ── Team ───────────────────────────────────────────────────────────
+    s.push('## Agent Team\n');
+    s.push('```');
+    s.push('Product Manager (top level)');
+    s.push('├── Business Analyst');
+    s.push('├── Engineering Manager');
+    s.push('│   ├── Solutions Architect');
+    s.push('│   ├── System Architect');
+    s.push('│   ├── Senior Developer');
+    s.push('│   │   └── Junior Developer');
+    s.push('│   ├── Database Engineer');
+    s.push('│   ├── Code Reviewer');
+    s.push('│   ├── QA Engineer');
+    s.push('│   ├── Performance Engineer');
+    s.push('│   ├── Security Engineer');
+    s.push('│   ├── Compliance Officer');
+    s.push('│   ├── Accessibility Specialist');
+    s.push('│   ├── SRE Engineer');
+    s.push('│   ├── DevOps Engineer');
+    s.push('│   └── Documentation Writer');
+    s.push('└── UI/UX Designer');
+    s.push('```\n');
 
-    sections.push('## Artifact Format\n');
-    sections.push('Agents produce artifacts using this format:\n');
-    sections.push('```');
-    sections.push('---ARTIFACT_START---');
-    sections.push('Type: <artifact_type>');
-    sections.push('Name: <artifact_name>');
-    sections.push('Description: <description>');
-    sections.push('Content:');
-    sections.push('<content>');
-    sections.push('---ARTIFACT_END---');
-    sections.push('```\n');
+    s.push('Agent definitions are in `.cdm/agents/`. Each file contains the agent\'s role, system prompt, capabilities, and artifact contracts.\n');
 
-    sections.push('## Issue Format\n');
-    sections.push('```');
-    sections.push('---ISSUE_START---');
-    sections.push('Type: <issue_type>');
-    sections.push('Severity: <critical|high|medium|low|info>');
-    sections.push('Title: <title>');
-    sections.push('Description: <description>');
-    sections.push('---ISSUE_END---');
-    sections.push('```');
+    // ── Pipeline ───────────────────────────────────────────────────────
+    s.push('## Development Pipeline\n');
+    s.push('Features go through these stages in order:\n');
+    s.push('1. **Requirements Gathering** → Product Manager');
+    s.push('2. **Architecture Design** → System Architect');
+    s.push('3. **UI/UX Design** → UI Designer');
+    s.push('4. **Task Breakdown** → Engineering Manager');
+    s.push('5. **Implementation** → Senior Developer + Junior Developer');
+    s.push('6. **Code Review** → Code Reviewer');
+    s.push('7. **Testing** → QA Engineer');
+    s.push('8. **Security Review** → Security Engineer');
+    s.push('9. **Documentation** → Documentation Writer');
+    s.push('10. **Deployment** → DevOps Engineer\n');
 
-    return sections.join('\n');
+    // ── Delegation ─────────────────────────────────────────────────────
+    s.push('## Agent Delegation Protocol\n');
+    s.push('When delegating work to a subagent:\n');
+    s.push('1. Read the agent\'s definition from `.cdm/agents/<agent-name>.md`');
+    s.push('2. Include the project context from `.cdm/project-analysis.md`');
+    s.push('3. Include the code style rules from `.cdm/codestyle-profile.md`');
+    s.push('4. Provide all relevant input artifacts and clear output expectations');
+    s.push('5. Task prompts are saved to `.cdm/agent-prompts/` for traceability\n');
+
+    // ── Artifact format ────────────────────────────────────────────────
+    s.push('## Artifact Format\n');
+    s.push('```');
+    s.push('---ARTIFACT_START---');
+    s.push('Type: <artifact_type>');
+    s.push('Name: <artifact_name>');
+    s.push('Description: <description>');
+    s.push('Content:');
+    s.push('<content>');
+    s.push('---ARTIFACT_END---');
+    s.push('```\n');
+
+    s.push('## Issue Format\n');
+    s.push('```');
+    s.push('---ISSUE_START---');
+    s.push('Type: <issue_type>');
+    s.push('Severity: <critical|high|medium|low|info>');
+    s.push('Title: <title>');
+    s.push('Description: <description>');
+    s.push('---ISSUE_END---');
+    s.push('```');
+
+    return s.join('\n');
   }
 
   private resolveExecutionMode(): ExecutionMode {

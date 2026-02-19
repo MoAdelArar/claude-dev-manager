@@ -134,7 +134,7 @@ describe('CDM CLI — End-to-End', () => {
 
       expect(fs.existsSync(path.join(projectDir, 'cdm.config.yaml'))).toBe(true);
       expect(fs.existsSync(path.join(projectDir, 'CLAUDE.md'))).toBe(true);
-      expect(fs.existsSync(path.join(projectDir, 'agents'))).toBe(true);
+      expect(fs.existsSync(path.join(projectDir, '.cdm', 'agents'))).toBe(true);
       expect(fs.existsSync(path.join(projectDir, '.cdm'))).toBe(true);
     });
 
@@ -145,7 +145,7 @@ describe('CDM CLI — End-to-End', () => {
 
     it('should generate agent instruction files for all agents', () => {
       cdm(`init --project "${projectDir}"`, projectDir);
-      const agentsDir = path.join(projectDir, 'agents');
+      const agentsDir = path.join(projectDir, '.cdm', 'agents');
       const files = fs.readdirSync(agentsDir);
       expect(files.length).toBeGreaterThanOrEqual(11);
       expect(files.some(f => f.includes('product-manager'))).toBe(true);
@@ -165,7 +165,7 @@ describe('CDM CLI — End-to-End', () => {
     it('should generate a CLAUDE.md with team structure', () => {
       cdm(`init --project "${projectDir}"`, projectDir);
       const claudeMd = fs.readFileSync(path.join(projectDir, 'CLAUDE.md'), 'utf-8');
-      expect(claudeMd).toContain('Team Structure');
+      expect(claudeMd).toContain('Agent Team');
       expect(claudeMd).toContain('Development Pipeline');
       expect(claudeMd).toContain('Artifact Format');
       expect(claudeMd).toContain('ARTIFACT_START');

@@ -518,7 +518,7 @@ describe('ClaudeCodeBridge branch coverage', () => {
       });
       bridge.writeAgentInstructionFiles();
 
-      const agentsDir = path.join(tempDir, 'agents');
+      const agentsDir = path.join(tempDir, '.cdm', 'agents');
       expect(fs.existsSync(agentsDir)).toBe(true);
 
       const files = fs.readdirSync(agentsDir);
@@ -539,7 +539,7 @@ describe('ClaudeCodeBridge branch coverage', () => {
       });
       const content = bridge.generateMainClaudeMd();
 
-      expect(content).toContain('Team Structure');
+      expect(content).toContain('Agent Team');
       expect(content).toContain('Product Manager');
       expect(content).toContain('Engineering Manager');
       expect(content).toContain('ARTIFACT_START');

@@ -104,10 +104,15 @@ interface CodeSamples {
 
 // ─── Source patterns used for detection ──────────────────────────────────────
 
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+const SOURCE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.go', '.rs', '.rb', '.java', '.kt',
+]);
 const IGNORE_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', '.next', '.nuxt',
-  'coverage', '.cdm', '.cache', '__pycache__', '.venv',
+  'coverage', '.cdm', '.cache', '__pycache__', '.venv', 'venv',
+  'env', '.env', '.tox', '.mypy_cache', '.pytest_cache', '.ruff_cache',
+  'target', 'vendor',
 ]);
 
 // ─── Profiler ───────────────────────────────────────────────────────────────
@@ -242,34 +247,35 @@ export class CodeStyleProfiler {
     }
 
     // Code samples
+    const lang = this.detectPrimaryLanguage();
     s.push('## Code Samples (follow these patterns)\n');
     if (profile.samples.typicalImportBlock) {
       s.push('### Import block');
-      s.push('```typescript');
+      s.push(`\`\`\`${lang}`);
       s.push(profile.samples.typicalImportBlock);
       s.push('```\n');
     }
     if (profile.samples.typicalFunction) {
       s.push('### Function');
-      s.push('```typescript');
+      s.push(`\`\`\`${lang}`);
       s.push(profile.samples.typicalFunction);
       s.push('```\n');
     }
     if (profile.samples.typicalClass) {
       s.push('### Class');
-      s.push('```typescript');
+      s.push(`\`\`\`${lang}`);
       s.push(profile.samples.typicalClass);
       s.push('```\n');
     }
     if (profile.samples.typicalErrorHandler) {
       s.push('### Error handling');
-      s.push('```typescript');
+      s.push(`\`\`\`${lang}`);
       s.push(profile.samples.typicalErrorHandler);
       s.push('```\n');
     }
     if (profile.samples.typicalTest) {
       s.push('### Test');
-      s.push('```typescript');
+      s.push(`\`\`\`${lang}`);
       s.push(profile.samples.typicalTest);
       s.push('```\n');
     }
@@ -321,6 +327,7 @@ export class CodeStyleProfiler {
   private detectNaming(): NamingConventions {
     const paths = this.allPaths();
     const sources = this.allSource();
+    const lang = this.detectPrimaryLanguage();
 
     const fileNames = paths.map(p => path.basename(p, path.extname(p)));
     const fileStyle = this.dominantCase(fileNames);
@@ -333,36 +340,51 @@ export class CodeStyleProfiler {
     let constStyle = 'camelCase';
     let interfaceStyle = 'PascalCase';
     let enumStyle = 'PascalCase with PascalCase values';
+    let testNaming = '*.test.ts';
+    let componentStyle = 'N/A';
 
     const allCode = sources.join('\n');
 
-    const constNames = [...allCode.matchAll(/(?:const|let)\s+([A-Z][A-Z_0-9]+)\s*=/g)].map(m => m[1]);
-    if (constNames.length > 3) constStyle = 'UPPER_SNAKE_CASE';
+    if (lang === 'python') {
+      varStyle = 'snake_case';
+      fnStyle = 'snake_case';
+      constStyle = 'UPPER_SNAKE_CASE';
+      interfaceStyle = 'N/A (Python uses ABC/Protocol)';
+      enumStyle = 'PascalCase with UPPER_SNAKE_CASE values';
 
-    const snakeVars = [...allCode.matchAll(/(?:const|let|var)\s+([a-z][a-z_0-9]+)\s*=/g)];
-    const camelVars = [...allCode.matchAll(/(?:const|let|var)\s+([a-z][a-zA-Z0-9]+)\s*=/g)];
-    if (snakeVars.length > camelVars.length * 2) varStyle = 'snake_case';
+      const testPaths = paths.filter(p => p.includes('test_') || p.includes('_test.py'));
+      testNaming = testPaths.length > 0
+        ? (testPaths[0]!.includes('test_') ? 'test_*.py' : '*_test.py')
+        : 'test_*.py';
+    } else {
+      const constNames = [...allCode.matchAll(/(?:const|let)\s+([A-Z][A-Z_0-9]+)\s*=/g)].map(m => m[1]);
+      if (constNames.length > 3) constStyle = 'UPPER_SNAKE_CASE';
 
-    const snakeFns = [...allCode.matchAll(/function\s+([a-z][a-z_0-9]+)\s*\(/g)];
-    const camelFns = [...allCode.matchAll(/function\s+([a-z][a-zA-Z0-9]+)\s*\(/g)];
-    if (snakeFns.length > camelFns.length * 2) fnStyle = 'snake_case';
+      const snakeVars = [...allCode.matchAll(/(?:const|let|var)\s+([a-z][a-z_0-9]+)\s*=/g)];
+      const camelVars = [...allCode.matchAll(/(?:const|let|var)\s+([a-z][a-zA-Z0-9]+)\s*=/g)];
+      if (snakeVars.length > camelVars.length * 2) varStyle = 'snake_case';
 
-    const iPrefixInterfaces = [...allCode.matchAll(/interface\s+(I[A-Z]\w+)/g)];
-    if (iPrefixInterfaces.length > 2) interfaceStyle = 'PascalCase with I-prefix';
+      const snakeFns = [...allCode.matchAll(/function\s+([a-z][a-z_0-9]+)\s*\(/g)];
+      const camelFns = [...allCode.matchAll(/function\s+([a-z][a-zA-Z0-9]+)\s*\(/g)];
+      if (snakeFns.length > camelFns.length * 2) fnStyle = 'snake_case';
 
-    const stringEnumValues = [...allCode.matchAll(/=\s*'[a-z_]+'/g)];
-    const pascalEnumValues = [...allCode.matchAll(/=\s*'[A-Z][a-zA-Z]+'/g)];
-    if (stringEnumValues.length > pascalEnumValues.length) {
-      enumStyle = 'PascalCase with snake_case string values';
+      const iPrefixInterfaces = [...allCode.matchAll(/interface\s+(I[A-Z]\w+)/g)];
+      if (iPrefixInterfaces.length > 2) interfaceStyle = 'PascalCase with I-prefix';
+
+      const stringEnumValues = [...allCode.matchAll(/=\s*'[a-z_]+'/g)];
+      const pascalEnumValues = [...allCode.matchAll(/=\s*'[A-Z][a-zA-Z]+'/g)];
+      if (stringEnumValues.length > pascalEnumValues.length) {
+        enumStyle = 'PascalCase with snake_case string values';
+      }
+
+      const testPaths = paths.filter(p => p.includes('.test.') || p.includes('.spec.'));
+      testNaming = testPaths.length > 0
+        ? (testPaths[0]!.includes('.spec.') ? '*.spec.ts' : '*.test.ts')
+        : '*.test.ts';
+
+      const componentPaths = paths.filter(p => p.endsWith('.tsx') || p.endsWith('.jsx'));
+      componentStyle = componentPaths.length > 0 ? 'PascalCase' : 'N/A';
     }
-
-    const testPaths = paths.filter(p => p.includes('.test.') || p.includes('.spec.'));
-    const testNaming = testPaths.length > 0
-      ? (testPaths[0]!.includes('.spec.') ? '*.spec.ts' : '*.test.ts')
-      : '*.test.ts';
-
-    const componentPaths = paths.filter(p => p.endsWith('.tsx') || p.endsWith('.jsx'));
-    const componentStyle = componentPaths.length > 0 ? 'PascalCase' : 'N/A';
 
     return {
       files: fileStyle,
@@ -433,6 +455,21 @@ export class CodeStyleProfiler {
 
   private detectErrorHandling(): ErrorHandlingProfile {
     const allCode = this.allSource().join('\n');
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      const tryExcept = (allCode.match(/\btry\s*:/g) ?? []).length;
+      const customExceptions = (allCode.match(/class\s+\w+(?:Error|Exception)\s*\(/g) ?? []).length;
+      const raiseCount = (allCode.match(/\braise\s+\w+/g) ?? []).length;
+
+      return {
+        strategy: tryExcept > 0 ? 'try/except blocks' : 'Exceptions (raise)',
+        customErrorClasses: customExceptions > 0,
+        errorBoundaries: false,
+        resultTypes: false,
+        asyncErrorStyle: (allCode.match(/async\s+def/g) ?? []).length > 0 ? 'try/except in async functions' : 'N/A',
+      };
+    }
 
     const tryCatchCount = (allCode.match(/try\s*\{/g) ?? []).length;
     const catchCount = (allCode.match(/\.catch\s*\(/g) ?? []).length;
@@ -461,6 +498,34 @@ export class CodeStyleProfiler {
   private detectImportStyle(): ImportStyleProfile {
     const allCode = this.allSource().join('\n');
     const paths = this.allPaths();
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      const absoluteImports = (allCode.match(/^import\s+\w/gm) ?? []).length;
+      const fromImports = (allCode.match(/^from\s+\w/gm) ?? []).length;
+      const relativeImports = (allCode.match(/^from\s+\./gm) ?? []).length;
+
+      const barrelExports = paths.some(p => p.endsWith('__init__.py'));
+
+      let importOrder = 'No enforced order detected';
+      const firstPy = this.allSource().find(s => s.includes('import ')) ?? '';
+      const importLines = firstPy.split('\n').filter(l => /^(?:import|from)\s/.test(l));
+      if (importLines.length > 3) {
+        const stdlibFirst = importLines[0]?.match(/^(?:import|from)\s+(?:os|sys|re|json|pathlib|typing|collections|datetime|logging|functools|itertools)/);
+        if (stdlibFirst) {
+          importOrder = 'stdlib → third-party → local (PEP 8 / isort)';
+        }
+      }
+
+      return {
+        moduleSystem: 'Python modules (import/from)',
+        pathStyle: relativeImports > absoluteImports / 3 ? 'Relative imports (from . import)' : 'Absolute imports',
+        barrelExports,
+        typeImports: (allCode.match(/from\s+__future__\s+import\s+annotations/g) ?? []).length > 0,
+        importOrder,
+        nodeProtocol: false,
+      };
+    }
 
     const esImports = (allCode.match(/^import\s+/gm) ?? []).length;
     const requireCalls = (allCode.match(/require\s*\(/g) ?? []).length;
@@ -491,11 +556,38 @@ export class CodeStyleProfiler {
   // ── Formatting detection ──────────────────────────────────────────────
 
   private detectFormatting(): FormattingProfile {
-    let indentation = '2 spaces';
-    let quotes: 'single' | 'double' = 'single';
-    let semicolons = true;
+    const lang = this.detectPrimaryLanguage();
+    let indentation = lang === 'python' ? '4 spaces' : '2 spaces';
+    let quotes: 'single' | 'double' = lang === 'python' ? 'double' : 'single';
+    let semicolons = lang !== 'python';
     let trailingCommas = 'es5';
-    let maxLineLength = 100;
+    let maxLineLength = lang === 'python' ? 88 : 100;
+
+    if (lang === 'python') {
+      // Check Python-specific formatters
+      const pyprojectContent = this.readConfigFile(['pyproject.toml']);
+      if (pyprojectContent) {
+        const blackLine = pyprojectContent.match(/line[_-]length\s*=\s*(\d+)/);
+        if (blackLine) maxLineLength = parseInt(blackLine[1], 10);
+        if (pyprojectContent.includes('[tool.black]')) {
+          indentation = '4 spaces';
+          const singleQ = pyprojectContent.match(/skip[_-]string[_-]normalization\s*=\s*true/i);
+          if (!singleQ) quotes = 'double';
+        }
+        if (pyprojectContent.includes('[tool.ruff]')) {
+          const ruffLine = pyprojectContent.match(/line-length\s*=\s*(\d+)/);
+          if (ruffLine) maxLineLength = parseInt(ruffLine[1], 10);
+        }
+      }
+
+      const sample = this.allSource().slice(0, 5).join('\n');
+      const singleQuotes = (sample.match(/'/g) ?? []).length;
+      const doubleQuotes = (sample.match(/"/g) ?? []).length;
+      if (singleQuotes > doubleQuotes * 1.5) quotes = 'single';
+      else if (doubleQuotes > singleQuotes * 1.5) quotes = 'double';
+
+      return { indentation, quotes, semicolons: false, trailingCommas: 'yes (Python)', maxLineLength, bracketSpacing: true };
+    }
 
     const prettierRc = this.readConfigFile(['.prettierrc', '.prettierrc.json', '.prettierrc.yml', 'prettier.config.js']);
     if (prettierRc) {
@@ -542,6 +634,40 @@ export class CodeStyleProfiler {
 
   private detectTesting(): TestingProfile {
     const paths = this.allPaths();
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      const testFiles = paths.filter(p => p.includes('test_') || p.includes('_test.py') || p.includes('tests/'));
+      const testCode = testFiles.map(p => this.sourceContents.get(p) ?? '').join('\n');
+
+      let framework = 'unittest';
+      if (fs.existsSync(path.join(this.projectPath, 'pytest.ini')) ||
+          fs.existsSync(path.join(this.projectPath, 'conftest.py')) ||
+          testCode.includes('import pytest') || testCode.includes('from pytest')) {
+        framework = 'pytest';
+      }
+
+      const classTests = (testCode.match(/class\s+Test\w+/g) ?? []).length;
+      const fnTests = (testCode.match(/^def\s+test_/gm) ?? []).length;
+      const style = classTests > fnTests ? 'Class-based test cases' : 'Function-based tests (def test_...)';
+
+      const fileNaming = testFiles.some(p => p.includes('test_')) ? 'test_*.py' : '*_test.py';
+      const colocated = testFiles.some(p => !p.startsWith('test'));
+      const fileLocation = colocated ? 'Colocated (tests next to source)' : 'Separate tests/ directory';
+
+      const patchUsage = (testCode.match(/mock\.patch|@patch|MagicMock|mocker\./g) ?? []).length;
+      const mockPattern = patchUsage > 0 ? 'unittest.mock / pytest-mock (patch/MagicMock)' : 'Manual mocking';
+
+      const hasFixtures = (testCode.match(/@pytest\.fixture/g) ?? []).length;
+      const fixturePattern = hasFixtures > 0 ? 'pytest fixtures (@pytest.fixture)' : 'setUp/inline test data';
+
+      const hasCoverage = fs.existsSync(path.join(this.projectPath, '.coveragerc')) ||
+                          fs.existsSync(path.join(this.projectPath, 'setup.cfg'));
+      const coverageApproach = hasCoverage ? 'Configured (pytest-cov / coverage.py)' : 'Not configured';
+
+      return { framework, style, fileNaming, fileLocation, mockPattern, fixturePattern, coverageApproach };
+    }
+
     const testFiles = paths.filter(p => p.includes('.test.') || p.includes('.spec.') || p.includes('__tests__'));
     const testCode = testFiles.map(p => this.sourceContents.get(p) ?? '').join('\n');
 
@@ -584,6 +710,26 @@ export class CodeStyleProfiler {
   // ── TypeScript detection ──────────────────────────────────────────────
 
   private detectTypeScript(): TypeScriptProfile {
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      const allCode = this.allSource().join('\n');
+      const typeHints = (allCode.match(/:\s*(?:str|int|float|bool|list|dict|Optional|Union|Any)/g) ?? []).length;
+      const hasMypy = fs.existsSync(path.join(this.projectPath, 'mypy.ini')) ||
+                       fs.existsSync(path.join(this.projectPath, '.mypy.ini'));
+      const pyprojectContent = this.readConfigFile(['pyproject.toml']) ?? '';
+      const hasStrictMypy = pyprojectContent.includes('strict = true') || pyprojectContent.includes('strict=true');
+
+      return {
+        strictMode: hasStrictMypy,
+        anyUsage: typeHints > 0 ? 'Type hints used' : 'No type hints (untyped)',
+        genericsStyle: (allCode.match(/Generic\[|TypeVar/g) ?? []).length > 0 ? 'Used (TypeVar/Generic)' : 'Not used',
+        enumStyle: (allCode.match(/class\s+\w+\(.*Enum/g) ?? []).length > 0 ? 'Python Enum classes' : 'N/A',
+        nullHandling: 'Optional[T] / None checks',
+        assertionStyle: hasMypy ? 'mypy static analysis' : 'Runtime only',
+      };
+    }
+
     let strictMode = false;
     let anyUsage = 'Avoided';
     let genericsStyle = 'Used sparingly';
@@ -630,6 +776,49 @@ export class CodeStyleProfiler {
   private detectAPI(): APIProfile {
     const allCode = this.allSource().join('\n');
     const paths = this.allPaths();
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      const hasDjango = allCode.includes('urlpatterns') || allCode.includes('django.urls');
+      const hasDRF = allCode.includes('rest_framework') || allCode.includes('APIView') || allCode.includes('ViewSet');
+      const hasFastAPI = allCode.includes('FastAPI') || allCode.includes('APIRouter');
+      const hasFlask = allCode.includes('Flask(') || allCode.includes('@app.route');
+      const hasGraphQL = allCode.includes('graphene') || allCode.includes('strawberry');
+
+      if (!hasDjango && !hasDRF && !hasFastAPI && !hasFlask && !hasGraphQL) {
+        return { style: 'none', routePattern: 'N/A', validationApproach: 'N/A', authPattern: 'N/A', responseFormat: 'N/A' };
+      }
+
+      let style = 'REST';
+      if (hasGraphQL) style = 'GraphQL';
+
+      let routePattern = 'Unknown';
+      if (hasFastAPI) routePattern = 'FastAPI decorators (@app.get, @router.post)';
+      else if (hasDRF) routePattern = 'DRF ViewSets / APIView';
+      else if (hasDjango) routePattern = 'Django URL patterns (urlpatterns)';
+      else if (hasFlask) routePattern = 'Flask route decorators (@app.route)';
+
+      const hasPydantic = allCode.includes('BaseModel') || allCode.includes('pydantic');
+      const hasMarshmallow = allCode.includes('marshmallow') || allCode.includes('Schema(');
+      const hasDjangoForms = allCode.includes('forms.Form') || allCode.includes('ModelForm');
+      const validationApproach = hasPydantic ? 'Pydantic models (BaseModel)' :
+        hasMarshmallow ? 'Marshmallow schemas' :
+        hasDjangoForms ? 'Django Forms / Serializers' : 'Manual / none detected';
+
+      const hasJWT = allCode.includes('jwt') || allCode.includes('PyJWT');
+      const hasOAuth = allCode.includes('oauth') || allCode.includes('OAuth');
+      const hasDjangoAuth = allCode.includes('django.contrib.auth') || allCode.includes('login_required');
+      const authPattern = hasDjangoAuth ? 'Django auth system' :
+        hasJWT ? 'JWT tokens' :
+        hasOAuth ? 'OAuth' : 'Not detected';
+
+      const responseFormat = hasFastAPI ? 'JSON (automatic Pydantic serialization)' :
+        hasDRF ? 'JSON (DRF Response)' :
+        hasFlask ? 'JSON (jsonify)' :
+        hasDjango ? 'JSON (JsonResponse)' : 'JSON';
+
+      return { style, routePattern, validationApproach, authPattern, responseFormat };
+    }
 
     const hasExpress = allCode.includes('express()') || allCode.includes('Router()');
     const hasFastify = allCode.includes('fastify(') || allCode.includes('Fastify');
@@ -673,6 +862,16 @@ export class CodeStyleProfiler {
 
   private detectStateManagement(): string {
     const allCode = this.allSource().join('\n');
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      if (allCode.includes('celery') || allCode.includes('Celery(')) return 'Celery (task queue)';
+      if (allCode.includes('redis') || allCode.includes('Redis(')) return 'Redis';
+      if (allCode.includes('django.db') || allCode.includes('models.Model')) return 'Django ORM';
+      if (allCode.includes('SQLAlchemy') || allCode.includes('sqlalchemy')) return 'SQLAlchemy ORM';
+      return 'none';
+    }
+
     if (allCode.includes('createSlice') || allCode.includes('configureStore') || allCode.includes('@reduxjs')) return 'Redux Toolkit';
     if (allCode.includes('zustand') || allCode.includes('create(') && allCode.includes('set(')) return 'Zustand';
     if (allCode.includes('useContext') && allCode.includes('createContext')) return 'React Context';
@@ -686,6 +885,21 @@ export class CodeStyleProfiler {
 
   private extractSamples(): CodeSamples {
     const sources = Array.from(this.sourceContents.entries());
+    const lang = this.detectPrimaryLanguage();
+
+    if (lang === 'python') {
+      const nonTestSources = sources.filter(([p]) => !p.includes('test_') && !p.includes('_test.py'));
+      const testSources = sources.filter(([p]) => p.includes('test_') || p.includes('_test.py'));
+
+      return {
+        typicalFunction: this.findSample(nonTestSources, /^(?:async\s+)?def\s+\w+\([^)]*\)[\s\S]*?(?=\n(?:class\s|def\s|async\s+def\s|\S)|\n\n\n)/m, 20),
+        typicalClass: this.findSample(nonTestSources, /^class\s+\w+[\s\S]*?(?=\nclass\s|\n\n\n\w)/m, 25),
+        typicalTest: this.findSample(testSources, /(?:def\s+test_\w+|class\s+Test\w+)[\s\S]*?(?=\ndef\s+test_|\nclass\s)/m, 20),
+        typicalImportBlock: this.findPythonImportBlock(nonTestSources),
+        typicalErrorHandler: this.findSample(nonTestSources, /try\s*:[\s\S]*?except[\s\S]*?(?:\n\S)/m, 15),
+      };
+    }
+
     const nonTestSources = sources.filter(([p]) => !p.includes('.test.') && !p.includes('.spec.'));
     const testSources = sources.filter(([p]) => p.includes('.test.') || p.includes('.spec.'));
 
@@ -721,6 +935,47 @@ export class CodeStyleProfiler {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
+
+  private detectPrimaryLanguage(): string {
+    const paths = this.allPaths();
+    const pyCount = paths.filter(p => p.endsWith('.py')).length;
+    const tsCount = paths.filter(p => p.endsWith('.ts') || p.endsWith('.tsx')).length;
+    const jsCount = paths.filter(p => p.endsWith('.js') || p.endsWith('.jsx')).length;
+    const goCount = paths.filter(p => p.endsWith('.go')).length;
+    const rsCount = paths.filter(p => p.endsWith('.rs')).length;
+
+    const counts = [
+      { lang: 'python', count: pyCount },
+      { lang: 'typescript', count: tsCount },
+      { lang: 'javascript', count: jsCount },
+      { lang: 'go', count: goCount },
+      { lang: 'rust', count: rsCount },
+    ];
+    counts.sort((a, b) => b.count - a.count);
+
+    if (counts[0].count === 0) {
+      if (fs.existsSync(path.join(this.projectPath, 'requirements.txt')) ||
+          fs.existsSync(path.join(this.projectPath, 'pyproject.toml'))) return 'python';
+      if (fs.existsSync(path.join(this.projectPath, 'tsconfig.json'))) return 'typescript';
+      if (fs.existsSync(path.join(this.projectPath, 'go.mod'))) return 'go';
+      if (fs.existsSync(path.join(this.projectPath, 'Cargo.toml'))) return 'rust';
+      if (fs.existsSync(path.join(this.projectPath, 'package.json'))) return 'javascript';
+      return 'unknown';
+    }
+
+    return counts[0].lang;
+  }
+
+  private findPythonImportBlock(sources: [string, string][]): string {
+    for (const [, content] of sources) {
+      const lines = content.split('\n');
+      const importLines = lines.filter(l => /^(?:import|from)\s/.test(l));
+      if (importLines.length >= 3) {
+        return importLines.slice(0, 8).join('\n');
+      }
+    }
+    return '';
+  }
 
   private dominantCase(names: string[]): string {
     let kebab = 0, camel = 0, pascal = 0, snake = 0;

@@ -282,12 +282,12 @@ program
     const bridge = new ClaudeCodeBridge(agentRegistry, artifactStore, { projectPath });
 
     bridge.writeAgentInstructionFiles();
-    console.log(chalk.green('✅ Generated agent instruction files in agents/'));
+    console.log(chalk.green('✅ Generated agent instruction files in .cdm/agents/'));
 
     const claudeMd = bridge.generateMainClaudeMd();
     const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
     fs.writeFileSync(claudeMdPath, claudeMd, 'utf-8');
-    console.log(chalk.green('✅ Generated CLAUDE.md'));
+    console.log(chalk.green('✅ Generated CLAUDE.md (references .cdm/ structure)'));
 
     console.log(chalk.gray('\n  Running project analysis...'));
     const analyzer = new ProjectAnalyzer(projectPath);
@@ -295,7 +295,7 @@ program
     const markdown = analyzer.generateMarkdown(analysis);
     const analysisPath = path.join(projectPath, '.cdm', 'project-analysis.md');
     analyzer.saveAnalysis(analysisPath, markdown);
-    console.log(chalk.green(`✅ Generated project analysis (${analysis.modules.length} modules, ${analysis.overview.totalLines.toLocaleString()} lines)`));
+    console.log(chalk.green(`✅ Generated .cdm/project-analysis.md (${analysis.modules.length} modules, ${analysis.overview.totalLines.toLocaleString()} lines)`));
 
     console.log(chalk.gray('  Profiling code style...'));
     const profiler = new CodeStyleProfiler(projectPath);
@@ -303,9 +303,10 @@ program
     const profileMd = profiler.generateMarkdown(codeStyleProfile);
     const profilePath = path.join(projectPath, '.cdm', 'codestyle-profile.md');
     profiler.saveProfile(profilePath, profileMd);
-    console.log(chalk.green(`✅ Generated code style profile (${codeStyleProfile.architecture.pattern})`));
+    console.log(chalk.green(`✅ Generated .cdm/codestyle-profile.md (${codeStyleProfile.architecture.pattern})`));
 
-    console.log(chalk.bold.green('\n🎉 CDM initialized! Run `cdm start "your feature"` to begin.\n'));
+    console.log(chalk.bold.green('\n🎉 CDM initialized! Run `cdm start "your feature"` to begin.'));
+    console.log(chalk.gray('   All CDM data is in .cdm/ — CLAUDE.md is the entry point.\n'));
   });
 
 // ─── cdm artifacts ───────────────────────────────────────────────────────────

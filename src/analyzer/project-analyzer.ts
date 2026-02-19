@@ -70,22 +70,42 @@ interface TestStructure {
 // ─── Ignore patterns ────────────────────────────────────────────────────────
 
 const DEFAULT_IGNORE = [
-  'node_modules', '.git', 'dist', 'build', 'out', '.next', '.nuxt',
-  'coverage', '.cdm', '.cache', '.turbo', '__pycache__', '.venv',
-  'venv', 'env', '.env', '.idea', '.vscode', '.DS_Store',
-  'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+  'node_modules', '.git', 'dist', 'build', 'out', 'target', 'vendor',
+  '.next', '.nuxt', 'coverage', '.cdm', '.cache', '.turbo',
+  '__pycache__', '.venv', 'venv', 'env', '.tox', '.mypy_cache',
+  '.pytest_cache', '.ruff_cache', 'egg-info',
+  '.idea', '.vscode', '.DS_Store',
+  'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb',
+  'poetry.lock', 'Pipfile.lock',
   '*.map', '*.d.ts', '*.min.js', '*.min.css',
 ];
 
 const SOURCE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-  '.py', '.go', '.rs', '.java', '.kt', '.rb',
+  '.py', '.pyw',
+  '.go',
+  '.rs',
+  '.java', '.kt', '.kts', '.scala',
+  '.rb', '.erb',
+  '.php',
+  '.cs',
+  '.swift',
+  '.dart',
+  '.ex', '.exs',
+  '.c', '.cpp', '.cc', '.h', '.hpp',
+  '.lua',
+  '.r', '.R',
   '.vue', '.svelte', '.astro',
 ]);
 
 const TEST_PATTERNS = [
-  /\.test\.[jt]sx?$/, /\.spec\.[jt]sx?$/, /_test\.[jt]sx?$/,
-  /test_.*\.py$/, /.*_test\.py$/, /.*_test\.go$/,
+  /\.test\.[jt]sx?$/,  /\.spec\.[jt]sx?$/,   /_test\.[jt]sx?$/,
+  /test_.*\.py$/,       /.*_test\.py$/,
+  /.*_test\.go$/,
+  /Test\.java$/,        /Spec\.java$/,
+  /_test\.rb$/,         /_spec\.rb$/,
+  /Test\.php$/,
+  /test_.*\.exs$/,
 ];
 
 // ─── Analyzer ───────────────────────────────────────────────────────────────
@@ -264,15 +284,104 @@ export class ProjectAnalyzer {
     let buildTool = 'unknown';
     let testFramework = 'unknown';
 
-    const pkgPath = path.join(this.projectPath, 'package.json');
-    if (fs.existsSync(pkgPath)) {
+    const hasTsConfig = fs.existsSync(path.join(this.projectPath, 'tsconfig.json'));
+    const hasPkgJson = fs.existsSync(path.join(this.projectPath, 'package.json'));
+    const hasPyproject = fs.existsSync(path.join(this.projectPath, 'pyproject.toml'));
+    const hasRequirements = fs.existsSync(path.join(this.projectPath, 'requirements.txt'));
+    const hasSetupPy = fs.existsSync(path.join(this.projectPath, 'setup.py'));
+    const hasPipfile = fs.existsSync(path.join(this.projectPath, 'Pipfile'));
+    const hasGoMod = fs.existsSync(path.join(this.projectPath, 'go.mod'));
+    const hasCargoToml = fs.existsSync(path.join(this.projectPath, 'Cargo.toml'));
+
+    const isPython = hasPyproject || hasRequirements || hasSetupPy || hasPipfile;
+
+    if (hasTsConfig) {
+      language = 'TypeScript';
+    } else if (isPython) {
+      language = 'Python';
+    } else if (hasGoMod) {
+      language = 'Go';
+    } else if (hasCargoToml) {
+      language = 'Rust';
+    } else if (hasPkgJson) {
+      language = 'JavaScript';
+    }
+
+    if (language === 'Python') {
+      const pyDeps = this.readPythonDeps();
+      const allDeps = pyDeps.join(' ').toLowerCase();
+
+      // Project name from pyproject.toml or setup.py
+      if (hasPyproject) {
+        const content = this.safeReadFile(path.join(this.projectPath, 'pyproject.toml'));
+        const nameMatch = content.match(/^name\s*=\s*["']([^"']+)["']/m);
+        if (nameMatch) projectName = nameMatch[1];
+      }
+
+      // Framework
+      if (allDeps.includes('django')) framework = 'Django';
+      else if (allDeps.includes('fastapi')) framework = 'FastAPI';
+      else if (allDeps.includes('flask')) framework = 'Flask';
+      else if (allDeps.includes('tornado')) framework = 'Tornado';
+      else if (allDeps.includes('starlette')) framework = 'Starlette';
+      else if (allDeps.includes('aiohttp')) framework = 'aiohttp';
+      else if (allDeps.includes('sanic')) framework = 'Sanic';
+      else if (allDeps.includes('celery')) framework = 'Celery';
+      else if (allDeps.includes('scrapy')) framework = 'Scrapy';
+      else framework = 'Python stdlib';
+
+      // Test framework
+      if (allDeps.includes('pytest')) testFramework = 'pytest';
+      else if (allDeps.includes('nose')) testFramework = 'nose';
+      else if (fs.existsSync(path.join(this.projectPath, 'pytest.ini')) ||
+               fs.existsSync(path.join(this.projectPath, 'conftest.py'))) {
+        testFramework = 'pytest';
+      } else testFramework = 'unittest';
+
+      // Build tool
+      if (hasPyproject) {
+        const content = this.safeReadFile(path.join(this.projectPath, 'pyproject.toml'));
+        if (content.includes('poetry')) buildTool = 'Poetry';
+        else if (content.includes('hatch')) buildTool = 'Hatch';
+        else if (content.includes('flit')) buildTool = 'Flit';
+        else buildTool = 'pip';
+      } else if (hasPipfile) {
+        buildTool = 'Pipenv';
+      } else if (hasSetupPy) {
+        buildTool = 'setuptools';
+      } else {
+        buildTool = 'pip';
+      }
+    } else if (language === 'Go') {
+      buildTool = 'go';
+      testFramework = 'go test';
+      const goModContent = this.safeReadFile(path.join(this.projectPath, 'go.mod'));
+      const moduleMatch = goModContent.match(/^module\s+(.+)/m);
+      if (moduleMatch) {
+        const parts = moduleMatch[1].trim().split('/');
+        projectName = parts[parts.length - 1] ?? projectName;
+      }
+      if (goModContent.includes('gin-gonic')) framework = 'Gin';
+      else if (goModContent.includes('labstack/echo')) framework = 'Echo';
+      else if (goModContent.includes('gorilla/mux')) framework = 'Gorilla Mux';
+      else if (goModContent.includes('fiber')) framework = 'Fiber';
+      else framework = 'Go stdlib';
+    } else if (language === 'Rust') {
+      buildTool = 'cargo';
+      testFramework = 'cargo test';
+      const cargoContent = this.safeReadFile(path.join(this.projectPath, 'Cargo.toml'));
+      const nameMatch = cargoContent.match(/^name\s*=\s*"([^"]+)"/m);
+      if (nameMatch) projectName = nameMatch[1];
+      if (cargoContent.includes('actix')) framework = 'Actix';
+      else if (cargoContent.includes('axum')) framework = 'Axum';
+      else if (cargoContent.includes('rocket')) framework = 'Rocket';
+      else if (cargoContent.includes('warp')) framework = 'Warp';
+      else framework = 'Rust stdlib';
+    } else if (hasPkgJson) {
       try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        const pkg = JSON.parse(fs.readFileSync(path.join(this.projectPath, 'package.json'), 'utf-8'));
         projectName = pkg.name ?? projectName;
         const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-
-        if (fs.existsSync(path.join(this.projectPath, 'tsconfig.json'))) language = 'TypeScript';
-        else language = 'JavaScript';
 
         if (deps.next) framework = 'Next.js';
         else if (deps.react) framework = 'React';
@@ -294,20 +403,6 @@ export class ProjectAnalyzer {
         else if (deps.esbuild) buildTool = 'esbuild';
         else buildTool = 'npm scripts';
       } catch { /* ignore parse errors */ }
-    } else if (fs.existsSync(path.join(this.projectPath, 'pyproject.toml')) ||
-               fs.existsSync(path.join(this.projectPath, 'requirements.txt'))) {
-      language = 'Python';
-      framework = 'unknown';
-      buildTool = fs.existsSync(path.join(this.projectPath, 'pyproject.toml')) ? 'poetry/pip' : 'pip';
-      testFramework = 'pytest';
-    } else if (fs.existsSync(path.join(this.projectPath, 'go.mod'))) {
-      language = 'Go';
-      buildTool = 'go';
-      testFramework = 'go test';
-    } else if (fs.existsSync(path.join(this.projectPath, 'Cargo.toml'))) {
-      language = 'Rust';
-      buildTool = 'cargo';
-      testFramework = 'cargo test';
     }
 
     return {
@@ -436,6 +531,11 @@ export class ProjectAnalyzer {
 
   private extractExports(content: string, language: string): ExportEntry[] {
     const exports: ExportEntry[] = [];
+
+    if (language === 'python') {
+      return this.extractPythonExports(content);
+    }
+
     if (!['typescript', 'javascript'].includes(language)) return exports;
 
     const patterns: [RegExp, ExportEntry['kind']][] = [
@@ -490,13 +590,86 @@ export class ProjectAnalyzer {
     return exports;
   }
 
+  private extractPythonExports(content: string): ExportEntry[] {
+    const exports: ExportEntry[] = [];
+    const seen = new Set<string>();
+
+    // Top-level classes
+    const classPattern = /^class\s+(\w+)(?:\(([^)]*)\))?:/gm;
+    let m: RegExpExecArray | null;
+    while ((m = classPattern.exec(content)) !== null) {
+      const name = m[1];
+      if (!seen.has(name)) {
+        seen.add(name);
+        const bases = m[2]?.trim();
+        exports.push({ name, kind: 'class', signature: bases ? `(${bases})` : undefined });
+      }
+    }
+
+    // Top-level functions (not indented = module-level)
+    const fnPattern = /^(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\n:]+))?:/gm;
+    while ((m = fnPattern.exec(content)) !== null) {
+      const name = m[1];
+      if (!name.startsWith('_') && !seen.has(name)) {
+        seen.add(name);
+        const params = m[2]?.trim();
+        const returnType = m[3]?.trim();
+        let signature = `(${params})`;
+        if (returnType) signature += ` -> ${returnType}`;
+        exports.push({ name, kind: 'function', signature });
+      }
+    }
+
+    // Module-level constants (UPPER_CASE = ...)
+    const constPattern = /^([A-Z][A-Z_0-9]+)\s*(?::\s*\w+\s*)?=/gm;
+    while ((m = constPattern.exec(content)) !== null) {
+      const name = m[1];
+      if (!seen.has(name)) {
+        seen.add(name);
+        exports.push({ name, kind: 'const' });
+      }
+    }
+
+    // __all__ exports
+    const allMatch = content.match(/__all__\s*=\s*\[([^\]]+)\]/);
+    if (allMatch) {
+      const names = allMatch[1].match(/['"](\w+)['"]/g);
+      if (names) {
+        for (const n of names) {
+          const clean = n.replace(/['"]/g, '');
+          if (!seen.has(clean)) {
+            seen.add(clean);
+            exports.push({ name: clean, kind: 'variable' });
+          }
+        }
+      }
+    }
+
+    return exports;
+  }
+
   private extractImports(content: string, language: string): string[] {
     const imports: string[] = [];
+    const seen = new Set<string>();
+
+    if (language === 'python') {
+      // from X import Y  and  import X
+      const fromImport = /^(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))/gm;
+      let m: RegExpExecArray | null;
+      while ((m = fromImport.exec(content)) !== null) {
+        const imp = m[1] ?? m[2];
+        if (imp && !seen.has(imp)) {
+          seen.add(imp);
+          imports.push(imp);
+        }
+      }
+      return imports;
+    }
+
     if (!['typescript', 'javascript'].includes(language)) return imports;
 
     const regex = /(?:import|from)\s+['"]([^'"]+)['"]/g;
     let m: RegExpExecArray | null;
-    const seen = new Set<string>();
     while ((m = regex.exec(content)) !== null) {
       const imp = m[1];
       if (!seen.has(imp)) {
@@ -509,12 +682,26 @@ export class ProjectAnalyzer {
   }
 
   private generateDescription(content: string, exports: ExportEntry[], filePath: string): string {
+    // JS/TS doc comments
     const firstComment = content.match(/^\/\*\*\s*\n\s*\*\s*(.+?)(?:\n|\*\/)/);
     if (firstComment) return firstComment[1].trim();
 
     const firstLineComment = content.match(/^\/\/\s*(.+)$/m);
     if (firstLineComment && content.indexOf(firstLineComment[0]) < 100) {
       return firstLineComment[1].trim();
+    }
+
+    // Python docstrings (module-level)
+    const pyDocstring = content.match(/^(?:#![^\n]*\n)*(?:#[^\n]*\n)*\s*(?:"""([\s\S]*?)"""|'''([\s\S]*?)''')/);
+    if (pyDocstring) {
+      const doc = (pyDocstring[1] ?? pyDocstring[2] ?? '').trim().split('\n')[0];
+      if (doc) return doc;
+    }
+
+    // Python # comments at top
+    const pyComment = content.match(/^#\s*(.+)$/m);
+    if (pyComment && content.indexOf(pyComment[0]) < 100) {
+      return pyComment[1].trim();
     }
 
     const classExports = exports.filter(e => e.kind === 'class');
@@ -529,8 +716,8 @@ export class ProjectAnalyzer {
       return `Type definitions: ${typeExports.map(e => e.name).join(', ')}.`;
     }
 
-    if (filePath.includes('index')) {
-      return 'Barrel file — re-exports from sibling modules.';
+    if (filePath.includes('index') || filePath.includes('__init__')) {
+      return 'Package init — re-exports from submodules.';
     }
 
     return '';
@@ -569,8 +756,8 @@ export class ProjectAnalyzer {
 
   private resolveImportPath(fromDir: string, importPath: string): string | null {
     const target = path.normalize(path.join(fromDir, importPath));
-    const extensions = ['.ts', '.tsx', '.js', '.jsx', ''];
-    const suffixes = ['', '/index'];
+    const extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', ''];
+    const suffixes = ['', '/index', '/__init__'];
 
     for (const suffix of suffixes) {
       for (const ext of extensions) {
@@ -588,15 +775,43 @@ export class ProjectAnalyzer {
   private shortenPath(filePath: string): string {
     return filePath
       .replace(/\/index\.[jt]sx?$/, '')
-      .replace(/\.[jt]sx?$/, '');
+      .replace(/\/__init__\.py$/, '')
+      .replace(/\.[jt]sx?$/, '')
+      .replace(/\.py$/, '');
   }
 
   // ── External dependencies ─────────────────────────────────────────────
 
   private extractExternalDeps(): ExternalDep[] {
+    // Try package.json first (Node.js)
     const pkgPath = path.join(this.projectPath, 'package.json');
-    if (!fs.existsSync(pkgPath)) return [];
+    if (fs.existsSync(pkgPath)) {
+      return this.extractNodeDeps(pkgPath);
+    }
 
+    // Try Python dependency files
+    const reqPath = path.join(this.projectPath, 'requirements.txt');
+    const pyprojectPath = path.join(this.projectPath, 'pyproject.toml');
+    if (fs.existsSync(reqPath) || fs.existsSync(pyprojectPath)) {
+      return this.extractPythonDeps();
+    }
+
+    // Try go.mod
+    const goModPath = path.join(this.projectPath, 'go.mod');
+    if (fs.existsSync(goModPath)) {
+      return this.extractGoDeps(goModPath);
+    }
+
+    // Try Cargo.toml
+    const cargoPath = path.join(this.projectPath, 'Cargo.toml');
+    if (fs.existsSync(cargoPath)) {
+      return this.extractCargoDeps(cargoPath);
+    }
+
+    return [];
+  }
+
+  private extractNodeDeps(pkgPath: string): ExternalDep[] {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       const deps: ExternalDep[] = [];
@@ -633,17 +848,135 @@ export class ProjectAnalyzer {
       };
 
       for (const [name, version] of Object.entries(pkg.dependencies ?? {})) {
-        deps.push({
-          name,
-          version: String(version),
-          purpose: wellKnown[name],
-        });
+        deps.push({ name, version: String(version), purpose: wellKnown[name] });
       }
-
       return deps;
     } catch {
       return [];
     }
+  }
+
+  private extractPythonDeps(): ExternalDep[] {
+    const deps: ExternalDep[] = [];
+    const seen = new Set<string>();
+
+    const wellKnown: Record<string, string> = {
+      django: 'Full-stack web framework',
+      flask: 'Lightweight web framework',
+      fastapi: 'Async web framework with auto docs',
+      celery: 'Distributed task queue',
+      sqlalchemy: 'SQL toolkit and ORM',
+      alembic: 'Database migration tool',
+      pydantic: 'Data validation using type hints',
+      requests: 'HTTP client library',
+      httpx: 'Async HTTP client',
+      pytest: 'Testing framework',
+      numpy: 'Numerical computing',
+      pandas: 'Data analysis library',
+      scipy: 'Scientific computing',
+      boto3: 'AWS SDK for Python',
+      'google-cloud-storage': 'GCP Storage client',
+      'google-cloud-pubsub': 'GCP Pub/Sub client',
+      'google-cloud-bigquery': 'GCP BigQuery client',
+      redis: 'Redis client',
+      psycopg2: 'PostgreSQL adapter',
+      gunicorn: 'WSGI HTTP server',
+      uvicorn: 'ASGI HTTP server',
+      black: 'Code formatter',
+      ruff: 'Fast Python linter',
+      mypy: 'Static type checker',
+      click: 'CLI framework',
+      typer: 'CLI framework (type hints)',
+      tensorflow: 'Machine learning framework',
+      torch: 'Deep learning framework',
+      transformers: 'NLP models library',
+      scrapy: 'Web scraping framework',
+      beautifulsoup4: 'HTML parsing',
+      pillow: 'Image processing',
+      marshmallow: 'Object serialization',
+    };
+
+    const reqPath = path.join(this.projectPath, 'requirements.txt');
+    if (fs.existsSync(reqPath)) {
+      const content = this.safeReadFile(reqPath);
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('-')) continue;
+        const match = trimmed.match(/^([a-zA-Z0-9_-]+)(?:\[.*?\])?\s*([>=<!~]+\s*[\d.*]+)?/);
+        if (match && !seen.has(match[1].toLowerCase())) {
+          seen.add(match[1].toLowerCase());
+          deps.push({
+            name: match[1],
+            version: match[2]?.trim() ?? '*',
+            purpose: wellKnown[match[1].toLowerCase()],
+          });
+        }
+      }
+    }
+
+    const pyprojectPath = path.join(this.projectPath, 'pyproject.toml');
+    if (fs.existsSync(pyprojectPath)) {
+      const content = this.safeReadFile(pyprojectPath);
+      const depSection = content.match(/\[(?:project\.)?dependencies\]\s*\n([\s\S]*?)(?:\n\[|\n$)/);
+      if (depSection) {
+        const lines = depSection[1].split('\n');
+        for (const line of lines) {
+          const match = line.match(/^\s*["']?([a-zA-Z0-9_-]+)/);
+          if (match && !seen.has(match[1].toLowerCase())) {
+            seen.add(match[1].toLowerCase());
+            deps.push({
+              name: match[1],
+              version: '*',
+              purpose: wellKnown[match[1].toLowerCase()],
+            });
+          }
+        }
+      }
+    }
+
+    return deps;
+  }
+
+  private extractGoDeps(goModPath: string): ExternalDep[] {
+    const deps: ExternalDep[] = [];
+    try {
+      const content = fs.readFileSync(goModPath, 'utf-8');
+      const requireBlock = content.match(/require\s*\(([\s\S]*?)\)/);
+      if (requireBlock) {
+        for (const line of requireBlock[1].split('\n')) {
+          const match = line.trim().match(/^([\w./-]+)\s+(v[\d.]+)/);
+          if (match) {
+            deps.push({ name: match[1], version: match[2] });
+          }
+        }
+      }
+      const singleRequires = content.matchAll(/^require\s+([\w./-]+)\s+(v[\d.]+)/gm);
+      for (const m of singleRequires) {
+        deps.push({ name: m[1], version: m[2] });
+      }
+    } catch { /* ignore */ }
+    return deps;
+  }
+
+  private extractCargoDeps(cargoPath: string): ExternalDep[] {
+    const deps: ExternalDep[] = [];
+    try {
+      const content = fs.readFileSync(cargoPath, 'utf-8');
+      const depSection = content.match(/\[dependencies\]([\s\S]*?)(?:\n\[|$)/);
+      if (depSection) {
+        for (const line of depSection[1].split('\n')) {
+          const simple = line.match(/^(\w[\w-]*)\s*=\s*"([^"]+)"/);
+          const complex = line.match(/^(\w[\w-]*)\s*=\s*\{/);
+          if (simple) {
+            deps.push({ name: simple[1], version: simple[2] });
+          } else if (complex) {
+            const vMatch = line.match(/version\s*=\s*"([^"]+)"/);
+            deps.push({ name: complex[1], version: vMatch?.[1] ?? '*' });
+          }
+        }
+      }
+    } catch { /* ignore */ }
+    return deps;
   }
 
   // ── Entry points ──────────────────────────────────────────────────────
@@ -651,6 +984,7 @@ export class ProjectAnalyzer {
   private findEntryPoints(): string[] {
     const entryPoints: string[] = [];
 
+    // Node.js / package.json
     const pkgPath = path.join(this.projectPath, 'package.json');
     if (fs.existsSync(pkgPath)) {
       try {
@@ -675,11 +1009,72 @@ export class ProjectAnalyzer {
       } catch { /* ignore */ }
     }
 
-    const commonEntries = ['src/index.ts', 'src/main.ts', 'src/app.ts', 'src/cli.ts', 'index.ts', 'main.ts'];
-    for (const entry of commonEntries) {
+    // Node.js common entries
+    const nodeEntries = ['src/index.ts', 'src/main.ts', 'src/app.ts', 'src/cli.ts', 'index.ts', 'main.ts'];
+    for (const entry of nodeEntries) {
       if (fs.existsSync(path.join(this.projectPath, entry)) && !entryPoints.some(e => e.includes(entry))) {
         entryPoints.push(entry);
       }
+    }
+
+    // Python
+    const pythonEntries = [
+      'main.py', 'app.py', 'manage.py', 'wsgi.py', 'asgi.py',
+      'run.py', 'server.py', 'cli.py',
+      'src/main.py', 'src/app.py',
+      'app/main.py', 'app/__init__.py',
+    ];
+    for (const entry of pythonEntries) {
+      if (fs.existsSync(path.join(this.projectPath, entry))) {
+        const content = this.safeReadFile(path.join(this.projectPath, entry));
+        let label = entry;
+        if (entry === 'manage.py') label = `${entry} (Django management)`;
+        else if (entry.includes('wsgi')) label = `${entry} (WSGI entry)`;
+        else if (entry.includes('asgi')) label = `${entry} (ASGI entry)`;
+        else if (content.includes('if __name__')) label = `${entry} (main)`;
+        entryPoints.push(label);
+      }
+    }
+
+    // Detect Python entry from pyproject.toml [project.scripts]
+    const pyprojectPath = path.join(this.projectPath, 'pyproject.toml');
+    if (fs.existsSync(pyprojectPath)) {
+      const content = this.safeReadFile(pyprojectPath);
+      const scriptMatch = content.match(/\[project\.scripts\]\s*\n([\s\S]*?)(?:\n\[|$)/);
+      if (scriptMatch) {
+        for (const line of scriptMatch[1].split('\n')) {
+          const m = line.match(/^(\w+)\s*=\s*"([^"]+)"/);
+          if (m) entryPoints.push(`${m[2]} (script: ${m[1]})`);
+        }
+      }
+    }
+
+    // Go
+    const goMainFile = path.join(this.projectPath, 'main.go');
+    const goCmdDir = path.join(this.projectPath, 'cmd');
+    if (fs.existsSync(goMainFile)) {
+      entryPoints.push('main.go (main)');
+    }
+    if (fs.existsSync(goCmdDir)) {
+      try {
+        const cmds = fs.readdirSync(goCmdDir, { withFileTypes: true });
+        for (const cmd of cmds) {
+          if (cmd.isDirectory()) {
+            entryPoints.push(`cmd/${cmd.name}/ (command)`);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Rust
+    const rustMain = path.join(this.projectPath, 'src', 'main.rs');
+    const rustLib = path.join(this.projectPath, 'src', 'lib.rs');
+    if (fs.existsSync(rustMain)) entryPoints.push('src/main.rs (binary)');
+    if (fs.existsSync(rustLib)) entryPoints.push('src/lib.rs (library)');
+
+    // Makefile targets
+    if (fs.existsSync(path.join(this.projectPath, 'Makefile'))) {
+      entryPoints.push('Makefile (build targets)');
     }
 
     return entryPoints;
@@ -692,18 +1087,24 @@ export class ProjectAnalyzer {
     const allExports = modules.flatMap(m => m.exports);
     const allPaths = modules.map(m => m.filePath);
 
-    if (allPaths.some(p => p.includes('controller')) && allPaths.some(p => p.includes('service'))) {
+    // Language-agnostic patterns
+    if (allPaths.some(p => /controller/i.test(p)) && allPaths.some(p => /service/i.test(p))) {
       patterns.push('Controller-Service pattern (routes separated from business logic)');
     }
-    if (allPaths.some(p => p.includes('middleware'))) {
+    if (allPaths.some(p => /middleware/i.test(p))) {
       patterns.push('Middleware pattern for request processing');
     }
+    if (allPaths.some(p => /utils/i.test(p) || /helpers/i.test(p))) {
+      patterns.push('Shared utility/helper modules');
+    }
+    if (allPaths.some(p => /config/i.test(p))) {
+      patterns.push('External configuration (config files)');
+    }
+
+    // JS/TS specific
     if (allExports.some(e => e.kind === 'class' && e.signature?.includes('extends')) &&
         allExports.some(e => e.kind === 'interface')) {
       patterns.push('Object-oriented design with inheritance and interfaces');
-    }
-    if (allPaths.some(p => p.includes('utils') || p.includes('helpers'))) {
-      patterns.push('Shared utility/helper modules');
     }
     if (allPaths.some(p => /index\.[jt]sx?$/.test(p))) {
       patterns.push('Barrel exports (index files for clean imports)');
@@ -714,8 +1115,28 @@ export class ProjectAnalyzer {
     if (allPaths.some(p => p.includes('types') || p.includes('interfaces'))) {
       patterns.push('Centralized type definitions');
     }
-    if (allPaths.some(p => p.includes('config'))) {
-      patterns.push('External configuration (config files)');
+
+    // Python specific
+    if (allPaths.some(p => p.endsWith('__init__.py'))) {
+      patterns.push('Python package structure (__init__.py modules)');
+    }
+    if (allPaths.some(p => /models\.py/i.test(p)) && allPaths.some(p => /views\.py/i.test(p))) {
+      patterns.push('Django MVT pattern (models/views/templates)');
+    }
+    if (allPaths.some(p => /routers?\//i.test(p) || /routes?\//i.test(p))) {
+      patterns.push('Router-based API structure');
+    }
+    if (allPaths.some(p => /schemas?\//i.test(p) || /schemas?\.py/i.test(p))) {
+      patterns.push('Schema validation layer (Pydantic/Marshmallow)');
+    }
+    if (allPaths.some(p => /migrations?\//i.test(p))) {
+      patterns.push('Database migrations');
+    }
+    if (allPaths.some(p => /tasks?\.py/i.test(p)) || allPaths.some(p => /celery/i.test(p))) {
+      patterns.push('Background task processing');
+    }
+    if (allPaths.some(p => /decorators?\.py/i.test(p))) {
+      patterns.push('Decorator pattern for cross-cutting concerns');
     }
 
     const dirs = new Set(allPaths.map(p => p.split('/').slice(0, -1).join('/')));
@@ -732,6 +1153,7 @@ export class ProjectAnalyzer {
     const dirs = [...new Set(testFiles.map(f => path.dirname(f)))];
     const frameworks: string[] = [];
 
+    // Node.js test frameworks
     const pkgPath = path.join(this.projectPath, 'package.json');
     if (fs.existsSync(pkgPath)) {
       try {
@@ -743,6 +1165,21 @@ export class ProjectAnalyzer {
         if (deps.cypress) frameworks.push('Cypress');
         if (deps.playwright || deps['@playwright/test']) frameworks.push('Playwright');
       } catch { /* ignore */ }
+    }
+
+    // Python test frameworks
+    const pyDeps = this.readPythonDeps();
+    const allPyDeps = pyDeps.join(' ').toLowerCase();
+    if (allPyDeps.includes('pytest')) frameworks.push('pytest');
+    if (allPyDeps.includes('nose')) frameworks.push('nose');
+    if (fs.existsSync(path.join(this.projectPath, 'pytest.ini')) ||
+        fs.existsSync(path.join(this.projectPath, 'conftest.py'))) {
+      if (!frameworks.includes('pytest')) frameworks.push('pytest');
+    }
+
+    // Go
+    if (fs.existsSync(path.join(this.projectPath, 'go.mod'))) {
+      if (!frameworks.includes('go test')) frameworks.push('go test');
     }
 
     return { dirs, fileCount: testFiles.length, frameworks };
@@ -771,6 +1208,44 @@ export class ProjectAnalyzer {
       '.kt': 'kotlin', '.rb': 'ruby', '.vue': 'vue', '.svelte': 'svelte',
     };
     return map[ext] ?? 'unknown';
+  }
+
+  private readPythonDeps(): string[] {
+    const deps: string[] = [];
+    const files = ['requirements.txt', 'requirements-dev.txt', 'requirements_dev.txt'];
+    for (const file of files) {
+      const p = path.join(this.projectPath, file);
+      if (fs.existsSync(p)) {
+        const content = this.safeReadFile(p);
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('-')) {
+            const name = trimmed.split(/[>=<!~\[\s]/)[0];
+            if (name) deps.push(name);
+          }
+        }
+      }
+    }
+    const pyprojectPath = path.join(this.projectPath, 'pyproject.toml');
+    if (fs.existsSync(pyprojectPath)) {
+      const content = this.safeReadFile(pyprojectPath);
+      const depMatches = content.match(/["']([a-zA-Z0-9_-]+)(?:\[.*?\])?[>=<!~]/g);
+      if (depMatches) {
+        for (const m of depMatches) {
+          const name = m.replace(/^["']/, '').split(/[>=<!~\[]/)[0];
+          if (name) deps.push(name);
+        }
+      }
+    }
+    return deps;
+  }
+
+  private safeReadFile(filePath: string): string {
+    try {
+      return fs.readFileSync(filePath, 'utf-8');
+    } catch {
+      return '';
+    }
   }
 
   private groupByDirectory(modules: ModuleSummary[]): Record<string, ModuleSummary[]> {
