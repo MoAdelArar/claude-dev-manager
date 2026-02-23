@@ -123,6 +123,7 @@ export class ClaudeCodeBridge {
     agentLog(task.assignedTo, `Preparing task: ${task.title}`, task.stage);
 
     const prompt = agent.buildClaudeCodePrompt(task);
+    this.writePromptFile(task.assignedTo, task.id, prompt);
 
     try {
       const output = await this.invokeClaudeCode(prompt, task);
@@ -793,6 +794,14 @@ export class ClaudeCodeBridge {
       info: IssueSeverity.INFO,
     };
     return mapping[sevStr.toLowerCase()] ?? IssueSeverity.MEDIUM;
+  }
+
+  private writePromptFile(role: AgentRole, taskId: string, prompt: string): void {
+    const dir = path.join(this.options.projectPath, '.cdm', 'agent-prompts', role);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(dir, `${taskId}.md`), prompt, 'utf-8');
   }
 
   private estimateTokens(text: string): number {
