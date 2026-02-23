@@ -118,7 +118,10 @@ export class PipelineOrchestrator {
     };
 
     pipelineLog(`Starting pipeline for feature: ${feature.name}`);
-    pipelineLog(`Execution mode: ${this.bridge.getExecutionMode()} (Claude CLI ${this.bridge.isClaudeAvailable() ? 'available' : 'not found — using simulation'})`);
+    const modeReason = this.bridge.isNestedClaudeSession()
+      ? 'parent session detected — agents will run as fresh Claude CLI instances'
+      : this.bridge.isClaudeAvailable() ? 'Claude CLI available' : 'Claude CLI not found — using simulation';
+    pipelineLog(`Execution mode: ${this.bridge.getExecutionMode()} (${modeReason})`);
     if (result.contextOptimized) {
       pipelineLog('Context optimization: ON (role-aware filtering + artifact summarization)');
     }

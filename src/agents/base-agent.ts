@@ -155,20 +155,27 @@ export abstract class BaseAgent {
   }
 
   protected getOutputFormatInstructions(): string {
-    return `## Output
-Summary: what was accomplished.
-Artifacts — one block per artifact:
+    return `## Output Format
+Write a brief summary of what was accomplished, then emit each artifact and issue using EXACTLY the block format below. Each field MUST be on its own line — do not combine fields with | separators.
+
+Artifact block (one per artifact produced):
 ---ARTIFACT_START---
-Type: <type> | Name: <name> | Description: <desc>
+Type: <artifact_type>
+Name: <artifact_name>
+Description: <one-line description>
 Content:
-<content>
+<full content here>
 ---ARTIFACT_END---
-Issues — one block per issue:
+
+Issue block (one per issue found, omit section if none):
 ---ISSUE_START---
-Type: <type> | Severity: critical|high|medium|low|info | Title: <title>
-Description: <desc>
+Type: <issue_type>
+Severity: <critical|high|medium|low|info>
+Title: <short title>
+Description: <description>
 ---ISSUE_END---
-Recommendations: notes for next stage or other agents.`;
+
+End with a Recommendations section for the next stage.`;
   }
 
   prepareHandoff(

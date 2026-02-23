@@ -82,6 +82,7 @@ export class ClaudeCodeBridge {
   private options: ClaudeCodeOptions;
   private executionMode: ExecutionMode;
   private claudeAvailable: boolean | null = null;
+  private nestedSessionWarned = false;
 
   constructor(
     agentRegistry: AgentRegistry,
@@ -95,7 +96,11 @@ export class ClaudeCodeBridge {
   }
 
   getExecutionMode(): ExecutionMode {
-    return this.executionMode;
+    return this.resolveExecutionMode();
+  }
+
+  isNestedClaudeSession(): boolean {
+    return !!(process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT);
   }
 
   isClaudeAvailable(): boolean {
@@ -302,7 +307,7 @@ export class ClaudeCodeBridge {
 
   private async invokeClaudeCLI(prompt: string, task: AgentTask): Promise<string> {
     const claudeBin = this.options.claudePath ?? 'claude';
-    const timeoutMs = (this.options.timeout ?? 300) * 1000;
+    const timeoutMs = (this.options.timeout ?? 600) * 1000;
 
     agentLog(task.assignedTo, `Invoking Claude Code CLI [${task.title}]`, task.stage);
 
@@ -322,20 +327,50 @@ export class ClaudeCodeBridge {
       args.push('--allowedTools', allowedTools.join(','));
     }
 
-    args.push(prompt);
+    // Prompt is sent via stdin rather than as a CLI arg.
+    // This avoids two issues:
+    //   1. ARG_MAX limits on very long prompts.
+    //   2. claude --print treating an ignored/null stdin as "no input" even
+    //      when a positional argument is present.
+
+    // Build a clean child environment: inherit everything except Claude Code
+    // session markers that would cause the spawned process to be rejected as
+    // a nested session.  The child starts as a fresh Claude CLI instance.
+    const childEnv: NodeJS.ProcessEnv = { ...process.env };
+    if (this.isNestedClaudeSession()) {
+      if (!this.nestedSessionWarned) {
+        agentLog(
+          task.assignedTo,
+          'Detected parent Claude Code session — stripping session markers so agents run as fresh instances',
+          task.stage,
+        );
+        this.nestedSessionWarned = true;
+      }
+      delete childEnv.CLAUDECODE;
+      delete childEnv.CLAUDE_CODE_ENTRYPOINT;
+      delete childEnv.CLAUDE_CODE_SSE_PORT;
+    }
+    childEnv.CDM_AGENT_ROLE = task.assignedTo;
+    childEnv.CDM_PIPELINE_STAGE = task.stage;
+    childEnv.CDM_FEATURE_ID = task.featureId;
 
     return new Promise<string>((resolve, reject) => {
       const proc = spawn(claudeBin, args, {
         cwd: this.options.projectPath,
+        // stdin is a pipe so we can write the prompt then close it.
+        // detached puts the child in its own process group so it is not
+        // affected by signals (SIGTERM/SIGHUP) sent to the parent Claude Code
+        // process group when CDM is invoked from within an active session.
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
         timeout: timeoutMs,
-        env: {
-          ...process.env,
-          CDM_AGENT_ROLE: task.assignedTo,
-          CDM_PIPELINE_STAGE: task.stage,
-          CDM_FEATURE_ID: task.featureId,
-        },
+        env: childEnv,
       });
+
+      // Send the prompt via stdin and close the pipe so claude knows input is
+      // complete and can begin processing.
+      proc.stdin.write(prompt, 'utf-8');
+      proc.stdin.end();
 
       let stdout = '';
       let stderr = '';
