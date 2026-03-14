@@ -34,6 +34,13 @@ export interface StreamingCallbacks {
   onProgress?: (percent: number, message: string) => void;
 }
 
+export interface PipelineStepInfo {
+  index: number;
+  description: string;
+  agent: AgentRole;
+  skills: string[];
+}
+
 export interface PipelineOptions {
   skipSteps?: string[];
   template?: string;
@@ -41,8 +48,8 @@ export interface PipelineOptions {
   dryRun: boolean;
   interactive: boolean;
   startFromStep?: number;
-  onStepStart?: (step: { index: number; description: string }) => void;
-  onStepComplete?: (step: { index: number; description: string }) => void;
+  onStepStart?: (step: PipelineStepInfo) => void;
+  onStepComplete?: (step: PipelineStepInfo) => void;
   onAgentWork?: (role: AgentRole, task: unknown) => void;
   onError?: (stepIndex: number, error: Error) => void;
   streaming?: StreamingCallbacks;
@@ -113,8 +120,6 @@ export class PipelineOrchestrator {
     feature: Feature,
     options: PipelineOptions,
   ): Promise<PipelineResult> {
-    const _startTime = Date.now();
-
     pipelineLog(`Starting pipeline for feature: ${feature.name}`);
     const modeReason = this.bridge.isNestedClaudeSession()
       ? 'parent session detected — agents will run as fresh Claude CLI instances'
@@ -159,11 +164,23 @@ export class PipelineOrchestrator {
       dryRun: options.dryRun,
       skipSteps: skipStepIndices.length > 0 ? skipStepIndices : undefined,
       onStepStart: (step) => {
-        options.onStepStart?.({ index: step.index, description: step.description });
+        options.onStepStart?.({
+          index: step.index,
+          description: step.description,
+          agent: step.agent,
+          skills: step.skills,
+        });
         this.tracker.recordStepStarted(feature.id, `step-${step.index}`, step.agent);
       },
       onStepComplete: (step, result) => {
-        options.onStepComplete?.({ index: step.index, description: step.description });
+        options.onStepComplete?.({
+          index: step.index,
+          description: step.description,
+          agent: step.agent,
+          skills: step.skills,
+        });
+
+        this.projectContext.recordStepResult(feature.id, result);
 
         for (const artifact of result.artifacts) {
           this.tracker.recordArtifactProduced(

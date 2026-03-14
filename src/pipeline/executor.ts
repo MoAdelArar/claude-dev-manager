@@ -159,11 +159,16 @@ export class PipelineExecutor {
       }
 
       if (step.gateCondition) {
-        const gatePassed = this.evaluateGateCondition(step.gateCondition, stepResult);
-        if (!gatePassed) {
-          pipelineLog(`Gate condition failed for step ${step.index}: ${step.gateCondition}`, 'error');
-          result.stepsFailed.push(step.index);
-          break;
+        const isSimulation = this.bridge.getExecutionMode() === 'simulation';
+        if (isSimulation) {
+          pipelineLog(`Skipping gate condition in simulation mode: ${step.gateCondition}`);
+        } else {
+          const gatePassed = this.evaluateGateCondition(step.gateCondition, stepResult);
+          if (!gatePassed) {
+            pipelineLog(`Gate condition failed for step ${step.index}: ${step.gateCondition}`, 'error');
+            result.stepsFailed.push(step.index);
+            break;
+          }
         }
       }
     }

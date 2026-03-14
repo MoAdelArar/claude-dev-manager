@@ -11,7 +11,7 @@ import { EnhancedErrorDisplay } from '../components/EnhancedErrorDisplay.js';
 import { InteractiveWizard } from '../components/InteractiveWizard.js';
 import { ProjectContext } from '../../orchestrator/context.js';
 import { ArtifactStore } from '../../workspace/artifact-store.js';
-import { PipelineOrchestrator, type PipelineOptions } from '../../orchestrator/pipeline.js';
+import { PipelineOrchestrator, type PipelineOptions, type PipelineStepInfo } from '../../orchestrator/pipeline.js';
 import { loadConfig } from '../../utils/config.js';
 import { addFileTransport } from '../../utils/logger.js';
 import { isRtkInstalled, getRtkGain } from '../../utils/rtk.js';
@@ -121,7 +121,7 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
   };
 
   useEffect(() => {
-    if (showWizard || !description) {
+    if (showWizard || !description || options.estimate) {
       return;
     }
 
@@ -162,7 +162,7 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
           maxRetries: parseInt(options.maxRetries, 10),
           dryRun: options.dryRun,
           interactive: options.interactive,
-          onStepStart: (step) => {
+          onStepStart: (step: PipelineStepInfo) => {
             setState((s) => {
               const existingStep = s.steps.find((st) => st.index === step.index);
               if (existingStep) {
@@ -174,7 +174,6 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
                   ),
                 };
               }
-              const fullStep = step as { index: number; description: string; agent: import('../../types.js').AgentRole; skills: string[] };
               return {
                 ...s,
                 currentStep: step.index,
@@ -182,8 +181,8 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
                   index: step.index,
                   description: step.description,
                   status: StepStatus.IN_PROGRESS,
-                  agent: fullStep.agent,
-                  skills: fullStep.skills,
+                  agent: step.agent,
+                  skills: step.skills,
                 }],
               };
             });

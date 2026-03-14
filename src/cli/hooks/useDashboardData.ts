@@ -90,29 +90,37 @@ export function useDashboardData(projectPath: string): UseDashboardDataResult {
       );
 
       const history = tracker.getEvents();
-      const pipelineEvents = history.filter(
+      const pipelineCompletedEvents = history.filter(
         (e: TrackingEvent) =>
           e.type === 'pipeline_completed' &&
           new Date(e.timestamp) >= weekStart
       );
 
-      const successfulPipelines = pipelineEvents.filter(
-        (e: TrackingEvent) => (e.details as { success?: boolean })?.success === true
+      const pipelineFailedEvents = history.filter(
+        (e: TrackingEvent) =>
+          e.type === 'pipeline_failed' &&
+          new Date(e.timestamp) >= weekStart
       );
 
+      const totalPipelines = pipelineCompletedEvents.length + pipelineFailedEvents.length;
+
       let tokensThisWeek = 0;
-      for (const event of pipelineEvents) {
+      for (const event of pipelineCompletedEvents) {
+        const eventData = event as TrackingEvent;
+        tokensThisWeek += eventData.tokensUsed ?? 0;
+      }
+      for (const event of pipelineFailedEvents) {
         const eventData = event as TrackingEvent;
         tokensThisWeek += eventData.tokensUsed ?? 0;
       }
 
       const weekStats: WeekStats = {
         featuresCreated: featuresThisWeek.length,
-        pipelinesRun: pipelineEvents.length,
+        pipelinesRun: totalPipelines,
         tokensUsed: tokensThisWeek,
         successRate:
-          pipelineEvents.length > 0
-            ? Math.round((successfulPipelines.length / pipelineEvents.length) * 100)
+          totalPipelines > 0
+            ? Math.round((pipelineCompletedEvents.length / totalPipelines) * 100)
             : 0,
       };
 
