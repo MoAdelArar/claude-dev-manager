@@ -2,7 +2,7 @@ node_modules/
 dist/
 *.js.map
 *.d.ts
-
+cursorrules*
 # CDM generated files (created by `cdm init` / `cdm analyze` on target projects)
 .cdm/
 .claude/

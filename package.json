@@ -17,6 +17,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "postinstall": "node scripts/postinstall.js || true",
     "build": "tsc",
     "start": "node dist/cli.js",
     "dev": "ts-node src/cli.ts",
@@ -43,8 +44,17 @@
     "devops",
     "aws",
     "gcp",
-    "azure"
+    "azure",
+    "rtk"
   ],
+  "optionalBinaryDependencies": {
+    "rtk": {
+      "version": ">=0.20.0",
+      "description": "CLI proxy that reduces LLM token consumption by 60-90%",
+      "install": "brew install rtk && rtk init --global",
+      "url": "https://github.com/rtk-ai/rtk"
+    }
+  },
   "author": "MoAdelArar",
   "license": "MIT",
   "repository": {

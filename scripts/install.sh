@@ -8,13 +8,13 @@ echo "=== Claude Dev Manager — Claude Code Plugin Installer ==="
 echo ""
 
 # 1. Install dependencies and build
-echo "[1/3] Installing dependencies and building..."
+echo "[1/4] Installing dependencies and building..."
 cd "$PROJECT_DIR"
 npm install
 npm run build
 
 # 2. Register the MCP server with Claude Code
-echo "[2/3] Registering MCP server with Claude Code..."
+echo "[2/4] Registering MCP server with Claude Code..."
 CLAUDE_CONFIG_DIR="$HOME/.claude"
 MCP_CONFIG="$CLAUDE_CONFIG_DIR/mcp_servers.json"
 mkdir -p "$CLAUDE_CONFIG_DIR"
@@ -40,8 +40,18 @@ MCPEOF
 fi
 echo "  Registered at: $MCP_CONFIG"
 
-# 3. Install slash commands
-echo "[3/3] Installing slash commands..."
+# 3. Check for rtk (token optimizer)
+echo "[3/4] Checking for rtk (CLI token optimizer)..."
+if command -v rtk >/dev/null 2>&1; then
+  echo "  rtk found: $(rtk --version 2>/dev/null || echo 'installed')"
+  rtk init --global 2>/dev/null && echo "  RTK hook activated" || echo "  RTK hook setup skipped"
+else
+  echo "  rtk not found. Optional but recommended for 60-90% token savings."
+  echo "  Install: brew install rtk && rtk init --global"
+fi
+
+# 4. Install slash commands
+echo "[4/4] Installing slash commands..."
 COMMANDS_DEST="$CLAUDE_CONFIG_DIR/commands"
 mkdir -p "$COMMANDS_DEST"
 

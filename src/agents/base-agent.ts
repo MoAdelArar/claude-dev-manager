@@ -18,6 +18,7 @@ import { agentLog } from '../utils/logger';
 import { validateArtifact } from '../utils/validators';
 import { type ArtifactStore } from '../workspace/artifact-store';
 import { optimizeInputArtifacts, estimateTokens } from '../context/context-optimizer';
+import { isRtkInstalled } from '../utils/rtk';
 
 export abstract class BaseAgent {
   protected config: AgentConfig;
@@ -155,9 +156,13 @@ export abstract class BaseAgent {
   }
 
   protected getOutputFormatInstructions(): string {
+    const rtkNote = isRtkInstalled()
+      ? '\nWhen running CLI commands, prefer concise output flags (--oneline, -1, --short). CLI outputs are automatically compressed by RTK.\n'
+      : '';
+
     return `## Output Format
 Write a brief summary of what was accomplished, then emit each artifact and issue using EXACTLY the block format below. Each field MUST be on its own line — do not combine fields with | separators.
-
+${rtkNote}
 Artifact block (one per artifact produced):
 ---ARTIFACT_START---
 Type: <artifact_type>

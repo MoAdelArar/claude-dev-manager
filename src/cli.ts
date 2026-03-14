@@ -21,6 +21,7 @@ import { ClaudeCodeBridge, type ExecutionMode, type ProjectSnapshot } from './or
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 import { CodeStyleProfiler } from './analyzer/codestyle-profiler';
 import { DevelopmentTracker } from './tracker/development-tracker';
+import { ensureRtkInitialized, isRtkInstalled, getRtkGain } from './utils/rtk';
 
 // Read version from package.json at build time (resolved relative to dist/)
  
@@ -111,6 +112,10 @@ program
     console.log(chalk.white(`Project: ${chalk.bold(project.name)}`));
     console.log(chalk.white(`Language: ${project.config.language} | Framework: ${project.config.framework}`));
     console.log(chalk.white(`Feature: ${chalk.bold(description)}\n`));
+
+    if (!isRtkInstalled()) {
+      console.error(chalk.gray('Tip: Install rtk to reduce agent token usage by 60-90%: brew install rtk'));
+    }
 
     const priority = mapPriority(opts.priority);
     const feature = context.createFeature(description, description, priority);
@@ -349,6 +354,16 @@ program
     fs.writeFileSync(claudeMdPath, claudeMd, 'utf-8');
     console.log(chalk.green('✅ Generated CLAUDE.md (references .cdm/ structure)'));
 
+    // ── RTK setup (token optimizer) ────────────────────────────────────────────
+    const rtkResult = ensureRtkInitialized();
+    if (rtkResult.installed && rtkResult.hookActive) {
+      console.log(chalk.green('✅ RTK hook active — agent CLI outputs will be compressed'));
+    } else if (rtkResult.installed && !rtkResult.hookActive) {
+      console.log(chalk.yellow('⚠️  RTK found but hook setup failed. Run: rtk init --global'));
+    } else {
+      console.log(chalk.gray('   Tip: Install rtk for 60-90% token savings: brew install rtk'));
+    }
+
     console.log(chalk.bold.green('\n🎉 CDM initialized! Run `cdm start "your feature"` to begin.'));
     console.log(chalk.gray('   All CDM data is in .cdm/ — CLAUDE.md is the entry point.\n'));
   });
@@ -427,6 +442,10 @@ program
     console.log(chalk.white(`Feature: ${chalk.bold(feature.name)}`));
     console.log(chalk.white(`Status:  ${feature.status}`));
     console.log(chalk.white(`Stage:   ${feature.currentStage}\n`));
+
+    if (!isRtkInstalled()) {
+      console.error(chalk.gray('Tip: Install rtk to reduce agent token usage by 60-90%: brew install rtk'));
+    }
 
     const nextStage = findResumeStage(feature.currentStage, feature);
     if (!nextStage) {
@@ -910,6 +929,11 @@ function printPipelineResult(result: PipelineResult): void {
   console.log(`  Issues:           ${chalk.yellow(String(result.issues.length))}`);
   console.log(`  Tokens used:      ${result.totalTokensUsed.toLocaleString()}`);
   console.log(`  Duration:         ${(result.totalDurationMs / 1000).toFixed(1)}s`);
+
+  const rtkStats = getRtkGain();
+  if (rtkStats && rtkStats.totalCommands > 0) {
+    console.log(`  RTK savings:      ${rtkStats.tokensSaved.toLocaleString()} tokens (${rtkStats.savingsPercent}%) across ${rtkStats.totalCommands} commands`);
+  }
 
   if (result.issues.length > 0) {
     console.log(chalk.bold('\nIssues:'));

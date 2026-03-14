@@ -30,6 +30,8 @@ const DEFAULT_CLI_OPTIONS: CLIOptions = {
   maxBudget: 100000,
   interactive: true,
   outputFormat: 'text',
+  rtkEnabled: true,
+  rtkPath: 'rtk',
 };
 
 const CONFIG_FILE_NAMES = [

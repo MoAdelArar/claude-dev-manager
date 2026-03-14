@@ -497,6 +497,8 @@ export interface CLIOptions {
   maxBudget: number;
   interactive: boolean;
   outputFormat: 'text' | 'json' | 'markdown';
+  rtkEnabled: boolean;
+  rtkPath: string;
 }
 
 export interface CLIContext {

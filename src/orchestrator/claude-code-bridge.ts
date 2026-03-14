@@ -19,6 +19,7 @@ import { type ArtifactStore } from '../workspace/artifact-store';
 import logger from '../utils/logger';
 import { agentLog } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { isRtkInstalled } from '../utils/rtk';
 
 export type ExecutionMode = 'claude-cli' | 'simulation';
 
@@ -212,6 +213,14 @@ export class ClaudeCodeBridge {
     s.push('└── artifacts/                # Produced artifacts from pipeline stages');
     s.push('```\n');
 
+    // ── RTK token optimization (only if installed) ─────────────────────────
+    if (isRtkInstalled()) {
+      s.push('## Token Optimization\n');
+      s.push('RTK is configured to compress CLI command outputs (git, ls, grep, test runners).');
+      s.push('The PreToolUse hook rewrites Bash commands automatically. No manual action needed.');
+      s.push('Prefer concise output flags when running commands (e.g. `--oneline`, `-1`).\n');
+    }
+
     s.push('### Key files to read BEFORE making changes:\n');
     s.push('1. **`.cdm/analysis/overview.md`** — Project stack, dependencies, architecture, and design patterns');
     s.push('2. **`.cdm/analysis/codestyle.md`** — Follow the existing naming, formatting, and import conventions');
@@ -351,6 +360,11 @@ export class ClaudeCodeBridge {
       delete childEnv.CLAUDE_CODE_ENTRYPOINT;
       delete childEnv.CLAUDE_CODE_SSE_PORT;
     }
+
+    // RTK environment: PATH and RTK_* vars are inherited via the spread above.
+    // Do NOT strip RTK_* — the rtk PreToolUse hook needs these to compress CLI
+    // outputs in child Claude Code processes, reducing token consumption by 60-90%.
+
     childEnv.CDM_AGENT_ROLE = task.assignedTo;
     childEnv.CDM_PIPELINE_STAGE = task.stage;
     childEnv.CDM_FEATURE_ID = task.featureId;

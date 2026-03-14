@@ -62,6 +62,30 @@ npm link   # Makes 'cdm' available globally
 
 **Requirements:** Node.js >= 20
 
+### Optional: Install RTK (60-90% token savings)
+
+[RTK](https://github.com/rtk-ai/rtk) compresses CLI command outputs before they reach the agent's context window. When installed, CDM agent subprocesses automatically benefit from reduced token consumption.
+
+```bash
+# macOS (Homebrew)
+brew install rtk && rtk init --global
+
+# Linux (install script)
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+rtk init --global
+
+# Windows
+winget install rtk-ai.rtk
+rtk init --global
+```
+
+**Auto-install during npm install:**
+```bash
+CDM_AUTO_INSTALL_RTK=1 npm install
+```
+
+CDM will detect RTK automatically. If not installed, CDM works fine — you'll just see a tip suggesting installation.
+
 **Verify it works:**
 
 ```bash
