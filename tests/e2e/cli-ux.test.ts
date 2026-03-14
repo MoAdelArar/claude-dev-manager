@@ -6,7 +6,7 @@ describe('CLI UX Commands', () => {
 
   describe('cdm completion', () => {
     it('shows help when no shell specified', async () => {
-      const result = await $`npx tsx src/cli/index.tsx completion`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx completion`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -17,7 +17,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('generates bash completion script', async () => {
-      const result = await $`npx tsx src/cli/index.tsx completion bash`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx completion bash`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -26,7 +26,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('generates zsh completion script', async () => {
-      const result = await $`npx tsx src/cli/index.tsx completion zsh`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx completion zsh`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -35,7 +35,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('generates fish completion script', async () => {
-      const result = await $`npx tsx src/cli/index.tsx completion fish`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx completion fish`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -45,7 +45,7 @@ describe('CLI UX Commands', () => {
 
   describe('cdm start --estimate', () => {
     it('shows cost estimate for feature template', async () => {
-      const result = await $`npx tsx src/cli/index.tsx start "Test feature" --estimate --template feature`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx start "Test feature" --estimate --template feature`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -57,7 +57,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('shows cost estimate for quick-fix template', async () => {
-      const result = await $`npx tsx src/cli/index.tsx start "Fix bug" --estimate --template quick-fix`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx start "Fix bug" --estimate --template quick-fix`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -66,7 +66,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('auto-detects template from description', async () => {
-      const result = await $`npx tsx src/cli/index.tsx start "Fix login bug" --estimate`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx start "Fix login bug" --estimate`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -76,7 +76,7 @@ describe('CLI UX Commands', () => {
 
   describe('cdm --help', () => {
     it('shows completion command in help', async () => {
-      const result = await $`npx tsx src/cli/index.tsx --help`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx --help`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -84,7 +84,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('shows dashboard command in help', async () => {
-      const result = await $`npx tsx src/cli/index.tsx --help`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx --help`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
@@ -92,7 +92,7 @@ describe('CLI UX Commands', () => {
     });
 
     it('shows estimate flag in start help', async () => {
-      const result = await $`npx tsx src/cli/index.tsx start --help`.quiet();
+      const result = await $`bunx tsx src/cli/index.tsx start --help`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);

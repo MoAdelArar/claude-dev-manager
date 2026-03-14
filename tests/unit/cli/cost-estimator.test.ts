@@ -34,7 +34,7 @@ describe('cost-estimator', () => {
       const estimate = getTemplateEstimate('full-feature');
       
       expect(estimate.steps).toBe(6);
-      expect(estimate.tokens.min).toBeGreaterThan(estimate.tokens.min);
+      expect(estimate.tokens.max).toBeGreaterThan(estimate.tokens.min);
     });
 
     it('defaults to feature template for unknown template', () => {

@@ -71,7 +71,7 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
     ],
   },
   {
-    pattern: /timeout|ETIMEDOUT|ESOCKETTIMEDOUT/i,
+    pattern: /timeout|timed.?out|ETIMEDOUT|ESOCKETTIMEDOUT/i,
     title: 'Request Timeout',
     suggestion: 'The request timed out. This may be due to network issues or a large task.',
     actions: [

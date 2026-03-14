@@ -2,10 +2,10 @@ import { describe, it, expect } from 'bun:test';
 import { $ } from 'bun';
 
 describe('CDM CLI', () => {
-  const CLI_PATH = './dist/cli.js';
+  const CLI_SOURCE = './src/cli/index.tsx';
 
   it('cdm agents outputs agent list', async () => {
-    const result = await $`node ${CLI_PATH} agents --json`.quiet();
+    const result = await $`bunx tsx ${CLI_SOURCE} agents --json`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
@@ -20,14 +20,14 @@ describe('CDM CLI', () => {
   });
 
   it('cdm agents --json outputs valid JSON', async () => {
-    const result = await $`node ${CLI_PATH} agents --json`.quiet();
+    const result = await $`bunx tsx ${CLI_SOURCE} agents --json`.quiet();
     const output = result.stdout.toString();
     
     expect(() => JSON.parse(output)).not.toThrow();
   });
 
   it('cdm skills outputs skills list', async () => {
-    const result = await $`node ${CLI_PATH} skills --json`.quiet();
+    const result = await $`bunx tsx ${CLI_SOURCE} skills --json`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
@@ -38,7 +38,7 @@ describe('CDM CLI', () => {
   });
 
   it('cdm skills --category design filters correctly', async () => {
-    const result = await $`node ${CLI_PATH} skills --category design --json`.quiet();
+    const result = await $`bunx tsx ${CLI_SOURCE} skills --category design --json`.quiet();
     const output = result.stdout.toString();
     
     const skills = JSON.parse(output);
@@ -46,7 +46,7 @@ describe('CDM CLI', () => {
   });
 
   it('cdm pipeline outputs templates', async () => {
-    const result = await $`node ${CLI_PATH} pipeline --json`.quiet();
+    const result = await $`bunx tsx ${CLI_SOURCE} pipeline --json`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
@@ -59,7 +59,7 @@ describe('CDM CLI', () => {
   });
 
   it('cdm pipeline --template quick-fix shows template details', async () => {
-    const result = await $`node ${CLI_PATH} pipeline --template quick-fix`.quiet();
+    const result = await $`bunx tsx ${CLI_SOURCE} pipeline --template quick-fix`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
@@ -68,7 +68,7 @@ describe('CDM CLI', () => {
 
   it('cdm exits with code 2 for invalid template', async () => {
     try {
-      await $`node ${CLI_PATH} pipeline --template invalid-template`.quiet();
+      await $`bunx tsx ${CLI_SOURCE} pipeline --template invalid-template`.quiet();
     } catch (error: unknown) {
       const exitError = error as { exitCode: number };
       expect(exitError.exitCode).toBe(2);

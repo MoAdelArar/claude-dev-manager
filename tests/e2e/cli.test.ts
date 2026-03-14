@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-const CLI_PATH = path.join(PROJECT_ROOT, 'dist', 'cli.js');
+const CLI_SOURCE = path.join(PROJECT_ROOT, 'src', 'cli', 'index.tsx');
 
 function createTempProject(name = 'test-project'): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cdm-e2e-'));
@@ -28,7 +28,7 @@ function cdm(args: string, projectDir: string): string {
     env: { ...process.env, NODE_ENV: 'test', FORCE_COLOR: '0' },
     timeout: 60_000,
   };
-  return execSync(`node "${CLI_PATH}" ${args}`, opts).toString();
+  return execSync(`bunx tsx "${CLI_SOURCE}" ${args}`, opts).toString();
 }
 
 function cleanDir(dir: string): void {
@@ -37,13 +37,6 @@ function cleanDir(dir: string): void {
 
 describe('CDM CLI — End-to-End', () => {
   let projectDir: string;
-
-  beforeAll(() => {
-    const built = fs.existsSync(CLI_PATH);
-    if (!built) {
-      execSync('npm run build', { cwd: PROJECT_ROOT, stdio: 'pipe' });
-    }
-  });
 
   beforeEach(() => {
     projectDir = createTempProject();

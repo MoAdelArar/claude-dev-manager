@@ -3,10 +3,10 @@
   "version": "2.2.0",
   "description": "AI-powered development manager — 5 agents, 17 composable skills, 6 pipeline templates, powered by Claude Code",
   "type": "module",
-  "main": "dist/cli.js",
+  "main": "dist/cli/index.js",
   "types": "dist/types.d.ts",
   "bin": {
-    "cdm": "dist/cli.js",
+    "cdm": "dist/cli/index.js",
     "cdm-mcp-server": "dist/mcp-server.js"
   },
   "files": [
@@ -21,7 +21,7 @@
     "postinstall": "node scripts/postinstall.cjs || true",
     "build": "tsc",
     "build:bun": "bun build src/cli/index.tsx --outdir dist --target node && bun build src/mcp-server.ts --outdir dist --target node",
-    "start": "node dist/cli.js",
+    "start": "node dist/cli/index.js",
     "dev": "tsx src/cli/index.tsx",
     "test": "bun test --coverage",
     "test:unit": "bun test --test-name-pattern unit",
