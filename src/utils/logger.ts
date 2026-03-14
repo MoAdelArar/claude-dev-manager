@@ -2,52 +2,23 @@ import winston from 'winston';
 import chalk from 'chalk';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { AgentRole, PipelineStage } from '../types';
+import { AgentRole } from '../types';
 
 const AGENT_COLORS: Record<AgentRole, (text: string) => string> = {
-  [AgentRole.PRODUCT_MANAGER]: chalk.magenta,
-  [AgentRole.BUSINESS_ANALYST]: chalk.magentaBright,
-  [AgentRole.ENGINEERING_MANAGER]: chalk.blue,
-  [AgentRole.SOLUTIONS_ARCHITECT]: chalk.cyanBright,
-  [AgentRole.SYSTEM_ARCHITECT]: chalk.cyan,
-  [AgentRole.UI_DESIGNER]: chalk.yellow,
-  [AgentRole.SENIOR_DEVELOPER]: chalk.green,
-  [AgentRole.JUNIOR_DEVELOPER]: chalk.greenBright,
-  [AgentRole.DATABASE_ENGINEER]: chalk.blueBright,
-  [AgentRole.CODE_REVIEWER]: chalk.red,
-  [AgentRole.QA_ENGINEER]: chalk.yellowBright,
-  [AgentRole.PERFORMANCE_ENGINEER]: chalk.yellow,
-  [AgentRole.SECURITY_ENGINEER]: chalk.redBright,
-  [AgentRole.COMPLIANCE_OFFICER]: chalk.red,
-  [AgentRole.ACCESSIBILITY_SPECIALIST]: chalk.greenBright,
-  [AgentRole.SRE_ENGINEER]: chalk.blueBright,
-  [AgentRole.DEVOPS_ENGINEER]: chalk.blue,
-  [AgentRole.DOCUMENTATION_WRITER]: chalk.white,
+  [AgentRole.PLANNER]: chalk.magenta,
+  [AgentRole.ARCHITECT]: chalk.cyan,
+  [AgentRole.DEVELOPER]: chalk.green,
+  [AgentRole.REVIEWER]: chalk.yellow,
+  [AgentRole.OPERATOR]: chalk.blue,
 };
 
-const STAGE_ICONS: Record<PipelineStage, string> = {
-  [PipelineStage.REQUIREMENTS_GATHERING]: '📋',
-  [PipelineStage.ARCHITECTURE_DESIGN]: '🏗️',
-  [PipelineStage.UI_UX_DESIGN]: '🎨',
-  [PipelineStage.TASK_BREAKDOWN]: '📝',
-  [PipelineStage.IMPLEMENTATION]: '💻',
-  [PipelineStage.CODE_REVIEW]: '🔍',
-  [PipelineStage.TESTING]: '🧪',
-  [PipelineStage.SECURITY_REVIEW]: '🔒',
-  [PipelineStage.DOCUMENTATION]: '📚',
-  [PipelineStage.DEPLOYMENT]: '🚀',
-  [PipelineStage.COMPLETED]: '✅',
-};
-
-const customFormat = winston.format.printf(({ level, message, timestamp, agent, stage }) => {
+const customFormat = winston.format.printf(({ level, message, timestamp, agent, step }) => {
   const ts = chalk.gray(`[${timestamp}]`);
   const agentTag = agent
     ? AGENT_COLORS[agent as AgentRole]?.(`[${agent}]`) ?? `[${agent}]`
     : '';
-  const stageTag = stage
-    ? `${STAGE_ICONS[stage as PipelineStage] ?? ''} `
-    : '';
-  return `${ts} ${level} ${stageTag}${agentTag} ${message}`;
+  const stepTag = step ? chalk.dim(`[${step}] `) : '';
+  return `${ts} ${level} ${stepTag}${agentTag} ${message}`;
 });
 
 const logger = winston.createLogger({
@@ -96,18 +67,18 @@ export function addFileTransport(projectPath: string): void {
 export function agentLog(
   role: AgentRole,
   message: string,
-  stage?: PipelineStage,
+  step?: string,
   level: string = 'info',
 ): void {
-  logger.log({ level, message, agent: role, stage });
+  logger.log({ level, message, agent: role, step });
 }
 
-export function stageLog(
-  stage: PipelineStage,
+export function stepLog(
+  step: string,
   message: string,
   level: string = 'info',
 ): void {
-  logger.log({ level, message, stage });
+  logger.log({ level, message, step });
 }
 
 export function pipelineLog(message: string, level: string = 'info'): void {

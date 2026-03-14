@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 const server = new McpServer({
   name: 'claude-dev-manager',
-  version: '1.0.0',
+  version: '2.0.0',
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ const tool = server.tool.bind(server) as (
 ) => void;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MCP Tools — full parity with CDM CLI (17 tools)
+// MCP Tools — full parity with CDM CLI
 // ═══════════════════════════════════════════════════════════════════════════
 
 tool(
@@ -60,7 +60,7 @@ tool(
 
 tool(
   'cdm_analyze',
-  'Analyze the project codebase. Generates structural analysis (.cdm/project-analysis.md) and code style profile (.cdm/codestyle-profile.md).',
+  'Analyze the project codebase. Generates structural analysis (.cdm/analysis/) and code style profile.',
   {
     projectPath: z.string(),
     outputPath: z.string().optional(),
@@ -71,27 +71,29 @@ tool(
     if (outputPath) args += ` -o "${outputPath}"`;
     if (json) args += ' --json';
     const output = runCli(args, projectPath);
-    const analysis = readFileIfExists(path.join(projectPath, '.cdm', 'project-analysis.md'));
+    const analysis = readFileIfExists(path.join(projectPath, '.cdm', 'analysis', 'overview.md'));
     return text(analysis ? `${output}\n---\n${analysis}` : output);
   },
 );
 
 tool(
   'cdm_start_pipeline',
-  'Start the full development pipeline for a new feature. Runs 10 stages with 18 agents.',
+  'Start the development pipeline for a new feature. Uses 5 agents with composable skills and adaptive templates.',
   {
     projectPath: z.string(),
     featureDescription: z.string(),
+    template: z.string().optional().describe('Pipeline template: quick-fix, feature, full-feature, review-only, design-only, deploy'),
     priority: z.string().optional(),
-    skipStages: z.string().optional(),
+    skipSteps: z.string().optional().describe('Comma-separated step indices to skip'),
     mode: z.string().optional(),
     model: z.string().optional(),
     maxRetries: z.number().optional(),
     dryRun: z.boolean().optional(),
   },
-  async ({ projectPath, featureDescription, priority, skipStages, mode, model, maxRetries, dryRun }) => {
+  async ({ projectPath, featureDescription, template, priority, skipSteps, mode, model, maxRetries, dryRun }) => {
     let args = `start "${featureDescription}" --priority ${priority ?? 'medium'} --mode ${mode ?? 'claude-cli'} --no-interactive`;
-    if (skipStages) args += ` --skip ${skipStages}`;
+    if (template) args += ` --template ${template}`;
+    if (skipSteps) args += ` --skip-steps ${skipSteps}`;
     if (model) args += ` --model ${model}`;
     if (maxRetries) args += ` --max-retries ${maxRetries}`;
     if (dryRun) args += ' --dry-run';
@@ -101,20 +103,20 @@ tool(
 
 tool(
   'cdm_resume_pipeline',
-  'Resume a failed or paused pipeline from its last incomplete stage.',
+  'Resume a failed or paused pipeline from its last incomplete step.',
   {
     projectPath: z.string(),
     featureId: z.string().optional(),
     mode: z.string().optional(),
     model: z.string().optional(),
-    skipStages: z.string().optional(),
+    skipSteps: z.string().optional(),
     maxRetries: z.number().optional(),
   },
-  async ({ projectPath, featureId, mode, model, skipStages, maxRetries }) => {
+  async ({ projectPath, featureId, mode, model, skipSteps, maxRetries }) => {
     const id = featureId ? `${featureId} ` : '';
     let args = `resume ${id}--mode ${mode ?? 'claude-cli'}`;
     if (model) args += ` --model ${model}`;
-    if (skipStages) args += ` --skip ${skipStages}`;
+    if (skipSteps) args += ` --skip-steps ${skipSteps}`;
     if (maxRetries) args += ` --max-retries ${maxRetries}`;
     return text(runCli(args, projectPath));
   },
@@ -129,8 +131,8 @@ tool(
     if (features.length === 0) return text('No features found. Run cdm_init and cdm_start_pipeline first.');
 
     const summary = features.map((f: any) => {
-      const stages = f.stageResults ? Object.keys(f.stageResults) : [];
-      return `## ${f.name}\n- **ID:** ${f.id}\n- **Status:** ${f.status}\n- **Stage:** ${f.currentStage}\n- **Priority:** ${f.priority}\n- **Artifacts:** ${f.artifacts?.length ?? 0}\n- **Issues:** ${f.issues?.length ?? 0}\n- **Stages completed:** ${stages.join(', ') || 'none'}`;
+      const steps = f.stepResults ? Object.keys(f.stepResults) : [];
+      return `## ${f.name}\n- **ID:** ${f.id}\n- **Status:** ${f.status}\n- **Template:** ${f.executionPlan?.templateId ?? 'N/A'}\n- **Priority:** ${f.priority}\n- **Artifacts:** ${f.artifacts?.length ?? 0}\n- **Issues:** ${f.issues?.length ?? 0}\n- **Steps completed:** ${steps.join(', ') || 'none'}`;
     }).join('\n\n');
 
     return text(`# Feature Status\n\n${summary}`);
@@ -171,47 +173,97 @@ tool(
 
 tool(
   'cdm_show_feature',
-  'Show the full details of a specific feature by ID, including stage history, artifacts, and issues.',
+  'Show the full details of a specific feature by ID, including step history, artifacts, and issues.',
   { projectPath: z.string(), featureId: z.string() },
   async ({ projectPath, featureId }) => {
     const features = readJsonFiles(path.join(projectPath, '.cdm', 'features'));
     const match = features.find((f: any) => f.id === featureId || f.name?.toLowerCase().includes(featureId.toLowerCase()));
     if (!match) return text(`No feature found matching "${featureId}".`);
-    const lines = [`# Feature: ${match.name}`, `- **ID:** ${match.id}`, `- **Status:** ${match.status}`, `- **Stage:** ${match.currentStage}`, `- **Priority:** ${match.priority}`, `- **Created:** ${match.createdAt}`];
+    const lines = [`# Feature: ${match.name}`, `- **ID:** ${match.id}`, `- **Status:** ${match.status}`, `- **Template:** ${match.executionPlan?.templateId ?? 'N/A'}`, `- **Priority:** ${match.priority}`, `- **Created:** ${match.createdAt}`];
     if (match.artifacts?.length > 0) { lines.push('\n## Artifacts'); for (const a of match.artifacts) lines.push(`- ${a.name} (${a.type}) [${a.status}]`); }
     if (match.issues?.length > 0) { lines.push('\n## Issues'); for (const i of match.issues) lines.push(`- [${i.severity}] ${i.title}`); }
-    if (match.stageResults) { lines.push('\n## Stage History'); for (const [stage, result] of Object.entries(match.stageResults as Record<string, any>)) lines.push(`- [${result.status === 'approved' ? 'OK' : result.status === 'failed' ? 'FAIL' : '~'}] ${stage} — ${result.status}`); }
+    if (match.stepResults) { lines.push('\n## Step History'); for (const [step, result] of Object.entries(match.stepResults as Record<string, any>)) lines.push(`- [${result.status === 'completed' ? 'OK' : result.status === 'failed' ? 'FAIL' : '~'}] Step ${step} — ${result.status}`); }
     return text(lines.join('\n'));
   },
 );
 
 tool(
   'cdm_list_agents',
-  'List all 18 CDM agents and their roles in the development pipeline.',
+  'List all 5 CDM agents and their compatible skills.',
   {},
   async () => {
     const agents = [
-      ['Product Manager', 'Requirements', 'Specs, user stories, acceptance criteria'],
-      ['Business Analyst', 'Requirements (support)', 'ROI analysis, business cases, KPIs'],
-      ['Engineering Manager', 'Task Breakdown', 'Task lists, sprint plans, estimation'],
-      ['Solutions Architect', 'Architecture (support)', 'Technology decisions, integration, migration'],
-      ['System Architect', 'Architecture', 'System architecture, APIs, data models'],
-      ['UI/UX Designer', 'UI/UX Design', 'Interface specs, wireframes, components'],
-      ['Senior Developer', 'Implementation', 'Core features, complex architecture'],
-      ['Junior Developer', 'Implementation (support)', 'Utilities, simpler features, unit tests'],
-      ['Database Engineer', 'Architecture + Implementation', 'Schema design, migrations, query optimization'],
-      ['Code Reviewer', 'Code Review', 'Code quality, patterns, best practices'],
-      ['QA Engineer', 'Testing', 'Test plans, unit/integration/e2e tests'],
-      ['Performance Engineer', 'Testing (support)', 'Load testing, profiling, bottleneck analysis'],
-      ['Security Engineer', 'Security Review', 'Security audit, vulnerability assessment'],
-      ['Compliance Officer', 'Security (support)', 'GDPR, HIPAA, SOC2, PCI-DSS, privacy'],
-      ['Accessibility Specialist', 'UI/UX + Testing', 'WCAG compliance, a11y testing'],
-      ['SRE Engineer', 'Deployment (support)', 'Reliability, incident response, chaos eng'],
-      ['DevOps Engineer', 'Deployment & NFR', 'CI/CD, infra, monitoring, scaling, DR'],
-      ['Documentation Writer', 'Documentation', 'API docs, developer guides, changelogs'],
+      ['Planner', 'requirements-analysis, task-decomposition', 'Analyzes tasks, creates execution plans'],
+      ['Architect', 'system-design, api-design, data-modeling, ui-design', 'Designs systems, APIs, data models'],
+      ['Developer', 'code-implementation, test-writing, documentation', 'Writes code, tests, and docs'],
+      ['Reviewer', 'code-review, security-audit, performance-analysis, accessibility-audit, test-validation', 'Reviews quality, security, perf'],
+      ['Operator', 'ci-cd, deployment, monitoring', 'Handles CI/CD and deployment'],
     ];
     const rows = agents.map(([r, s, d]) => `| ${r} | ${s} | ${d} |`).join('\n');
-    return text(`# CDM Agents (18)\n\n| Agent | Stage | Responsibilities |\n|---|---|---|\n${rows}`);
+    return text(`# CDM Agents (5)\n\n| Agent | Skills | Description |\n|---|---|---|\n${rows}`);
+  },
+);
+
+tool(
+  'cdm_list_skills',
+  'List all 16 available skills, optionally filtered by category.',
+  { category: z.string().optional().describe('Filter: planning, design, build, review, operations') },
+  async ({ category }) => {
+    const skills = [
+      { id: 'requirements-analysis', name: 'Requirements Analysis', category: 'planning' },
+      { id: 'task-decomposition', name: 'Task Decomposition', category: 'planning' },
+      { id: 'system-design', name: 'System Design', category: 'design' },
+      { id: 'api-design', name: 'API Design', category: 'design' },
+      { id: 'data-modeling', name: 'Data Modeling', category: 'design' },
+      { id: 'ui-design', name: 'UI Design', category: 'design' },
+      { id: 'code-implementation', name: 'Code Implementation', category: 'build' },
+      { id: 'test-writing', name: 'Test Writing', category: 'build' },
+      { id: 'documentation', name: 'Documentation', category: 'build' },
+      { id: 'code-review', name: 'Code Review', category: 'review' },
+      { id: 'security-audit', name: 'Security Audit', category: 'review' },
+      { id: 'performance-analysis', name: 'Performance Analysis', category: 'review' },
+      { id: 'accessibility-audit', name: 'Accessibility Audit', category: 'review' },
+      { id: 'test-validation', name: 'Test Validation', category: 'review' },
+      { id: 'ci-cd', name: 'CI/CD Pipeline', category: 'operations' },
+      { id: 'deployment', name: 'Deployment', category: 'operations' },
+      { id: 'monitoring', name: 'Monitoring', category: 'operations' },
+    ];
+    let filtered = skills;
+    if (category) {
+      filtered = skills.filter(s => s.category === category);
+    }
+    const rows = filtered.map(s => `| ${s.id} | ${s.name} | ${s.category} |`).join('\n');
+    return text(`# Skills (${filtered.length})\n\n| ID | Name | Category |\n|---|---|---|\n${rows}`);
+  },
+);
+
+tool(
+  'cdm_get_skill',
+  'Get details for a specific skill by ID.',
+  { skillId: z.string() },
+  async ({ skillId }) => {
+    const skills: Record<string, { name: string; category: string; agents: string; desc: string }> = {
+      'requirements-analysis': { name: 'Requirements Analysis', category: 'planning', agents: 'Planner', desc: 'Extract requirements, user stories, acceptance criteria' },
+      'task-decomposition': { name: 'Task Decomposition', category: 'planning', agents: 'Planner', desc: 'Break work into ordered steps with dependencies' },
+      'system-design': { name: 'System Design', category: 'design', agents: 'Architect', desc: 'Architecture, components, data flows' },
+      'api-design': { name: 'API Design', category: 'design', agents: 'Architect', desc: 'REST/GraphQL/gRPC contracts' },
+      'data-modeling': { name: 'Data Modeling', category: 'design', agents: 'Architect', desc: 'Schema design, migrations, indexing' },
+      'ui-design': { name: 'UI Design', category: 'design', agents: 'Architect', desc: 'Interface specs, wireframes, WCAG compliance' },
+      'code-implementation': { name: 'Code Implementation', category: 'build', agents: 'Developer', desc: 'Production code following conventions' },
+      'test-writing': { name: 'Test Writing', category: 'build', agents: 'Developer', desc: 'Unit, integration, e2e tests' },
+      'documentation': { name: 'Documentation', category: 'build', agents: 'Developer', desc: 'API docs, developer guides' },
+      'code-review': { name: 'Code Review', category: 'review', agents: 'Reviewer', desc: 'Quality, patterns, best practices' },
+      'security-audit': { name: 'Security Audit', category: 'review', agents: 'Reviewer', desc: 'OWASP, vulnerabilities, compliance' },
+      'performance-analysis': { name: 'Performance Analysis', category: 'review', agents: 'Reviewer', desc: 'Bottlenecks, optimization' },
+      'accessibility-audit': { name: 'Accessibility Audit', category: 'review', agents: 'Reviewer', desc: 'WCAG 2.1 AA compliance' },
+      'test-validation': { name: 'Test Validation', category: 'review', agents: 'Reviewer', desc: 'Coverage, test quality' },
+      'ci-cd': { name: 'CI/CD Pipeline', category: 'operations', agents: 'Operator', desc: 'Build automation, artifact publishing' },
+      'deployment': { name: 'Deployment', category: 'operations', agents: 'Operator', desc: 'Infra config, release strategy' },
+      'monitoring': { name: 'Monitoring', category: 'operations', agents: 'Operator', desc: 'Observability, alerting, runbooks' },
+    };
+    const skill = skills[skillId];
+    if (!skill) return text(`Skill "${skillId}" not found. Run cdm_list_skills for available skills.`);
+    return text(`# ${skill.name}\n\n- **ID:** ${skillId}\n- **Category:** ${skill.category}\n- **Compatible Agents:** ${skill.agents}\n- **Description:** ${skill.desc}`);
   },
 );
 
@@ -236,9 +288,25 @@ tool('cdm_reset_config', 'Reset CDM configuration to defaults.',
   async ({ projectPath }) => text(runCli('config --reset', projectPath)),
 );
 
-tool('cdm_pipeline', 'Show the 10-stage pipeline configuration with agents.',
-  {},
-  async () => text(`# CDM Pipeline (10 stages, 18 agents)\n\n| # | Stage | Primary | Supporting | Skip |\n|---|---|---|---|---|\n| 1 | Requirements | Product Manager | Business Analyst | No |\n| 2 | Architecture | System Architect | Solutions Architect, DB Engineer, EM | No |\n| 3 | UI/UX Design | UI/UX Designer | Accessibility Specialist | Yes |\n| 4 | Task Breakdown | Engineering Manager | Senior Developer | No |\n| 5 | Implementation | Senior Developer | Junior Developer | No |\n| 6 | Code Review | Code Reviewer | *(reviewed by Sr Dev)* | No |\n| 7 | Testing | QA Engineer | Jr Dev, Perf Engineer, A11y | No |\n| 8 | Security | Security Engineer | Compliance Officer | Yes |\n| 9 | Documentation | Doc Writer | *(reviewed by PM)* | Yes |\n| 10 | Deployment | DevOps Engineer | SRE Engineer | Yes |`),
+tool('cdm_pipeline', 'Show the 6 available pipeline templates.',
+  { template: z.string().optional().describe('Show details for a specific template') },
+  async ({ template }) => {
+    const templates = [
+      { id: 'quick-fix', steps: 2, desc: 'Developer → Reviewer. For bugs and small fixes.' },
+      { id: 'feature', steps: 4, desc: 'Planner → Architect → Developer → Reviewer. Standard features.' },
+      { id: 'full-feature', steps: 6, desc: 'Feature + Security + Operator. For auth, payments.' },
+      { id: 'review-only', steps: 1, desc: 'Reviewer (multi-skill). For audits.' },
+      { id: 'design-only', steps: 2, desc: 'Planner → Architect. Architecture spikes.' },
+      { id: 'deploy', steps: 1, desc: 'Operator. Deploy existing code.' },
+    ];
+    if (template) {
+      const t = templates.find(t => t.id === template);
+      if (!t) return text(`Template "${template}" not found.`);
+      return text(`# ${t.id}\n\n- **Steps:** ${t.steps}\n- **Description:** ${t.desc}`);
+    }
+    const rows = templates.map(t => `| ${t.id} | ${t.steps} | ${t.desc} |`).join('\n');
+    return text(`# Pipeline Templates (6)\n\n| Template | Steps | Description |\n|---|---|---|\n${rows}`);
+  },
 );
 
 tool('cdm_get_history', 'Get the development history timeline.',
@@ -265,18 +333,18 @@ tool('cdm_export_history', 'Export history to .cdm/history/ as markdown and JSON
 
 tool('cdm_get_analysis', 'Get the project analysis — file map, exports, dependency graph, patterns.',
   { projectPath: z.string() },
-  async ({ projectPath }) => text(readFileIfExists(path.join(projectPath, '.cdm', 'project-analysis.md')) ?? 'No analysis found. Run cdm_analyze first.'),
+  async ({ projectPath }) => text(readFileIfExists(path.join(projectPath, '.cdm', 'analysis', 'overview.md')) ?? 'No analysis found. Run cdm_analyze first.'),
 );
 
 tool('cdm_get_codestyle', 'Get the code style profile — naming, architecture, formatting, testing conventions.',
   { projectPath: z.string() },
-  async ({ projectPath }) => text(readFileIfExists(path.join(projectPath, '.cdm', 'codestyle-profile.md')) ?? 'No profile found. Run cdm_analyze first.'),
+  async ({ projectPath }) => text(readFileIfExists(path.join(projectPath, '.cdm', 'analysis', 'codestyle.md')) ?? 'No profile found. Run cdm_analyze first.'),
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
 
-server.resource('cdm-pipeline-stages', 'cdm://pipeline/stages', async (uri) => ({
-  contents: [{ uri: uri.href, mimeType: 'text/markdown', text: '# CDM Pipeline\n\n1. Requirements → PM + BA\n2. Architecture → SA + SolArch + DBE\n3. UI/UX → Designer + A11y\n4. Tasks → EM + Sr Dev\n5. Implementation → Sr Dev + Jr Dev\n6. Code Review → Reviewer\n7. Testing → QA + Perf + A11y\n8. Security → SecEng + Compliance\n9. Docs → DocWriter\n10. Deployment → DevOps + SRE' }],
+server.resource('cdm-pipeline-templates', 'cdm://pipeline/templates', async (uri) => ({
+  contents: [{ uri: uri.href, mimeType: 'text/markdown', text: '# CDM Pipeline Templates\n\n- **quick-fix**: Developer[code-implementation] → Reviewer[code-review]\n- **feature**: Planner → Architect → Developer → Reviewer\n- **full-feature**: feature + Security + Operator\n- **review-only**: Reviewer (multi-skill)\n- **design-only**: Planner → Architect\n- **deploy**: Operator' }],
 }));
 
 async function main() {

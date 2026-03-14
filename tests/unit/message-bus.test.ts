@@ -22,15 +22,15 @@ describe('MessageBus', () => {
     it('should deliver messages to the correct subscriber', async () => {
       const received: AgentMessage[] = [];
 
-      bus.subscribe(AgentRole.ENGINEERING_MANAGER, [MessageType.TASK_ASSIGNMENT], (msg) => {
+      bus.subscribe(AgentRole.DEVELOPER, [MessageType.TASK_ASSIGNMENT], (msg) => {
         received.push(msg);
       });
 
       await bus.publish({
         id: uuidv4(),
         type: MessageType.TASK_ASSIGNMENT,
-        from: AgentRole.PRODUCT_MANAGER,
-        to: AgentRole.ENGINEERING_MANAGER,
+        from: AgentRole.PLANNER,
+        to: AgentRole.DEVELOPER,
         subject: 'New task',
         body: 'Please work on this',
         priority: MessagePriority.HIGH,
@@ -45,17 +45,17 @@ describe('MessageBus', () => {
     it('should not deliver messages to wrong agent', async () => {
       const received: AgentMessage[] = [];
 
-      bus.subscribe(AgentRole.SENIOR_DEVELOPER, [MessageType.TASK_ASSIGNMENT], (msg) => {
+      bus.subscribe(AgentRole.DEVELOPER, [MessageType.TASK_ASSIGNMENT], (msg) => {
         received.push(msg);
       });
 
       await bus.publish({
         id: uuidv4(),
         type: MessageType.TASK_ASSIGNMENT,
-        from: AgentRole.PRODUCT_MANAGER,
-        to: AgentRole.ENGINEERING_MANAGER,
-        subject: 'Not for dev',
-        body: 'This goes to EM',
+        from: AgentRole.PLANNER,
+        to: AgentRole.ARCHITECT,
+        subject: 'Another task',
+        body: 'Different agent',
         priority: MessagePriority.NORMAL,
         timestamp: new Date(),
         metadata: {},
@@ -64,20 +64,20 @@ describe('MessageBus', () => {
       expect(received).toHaveLength(0);
     });
 
-    it('should filter by message type', async () => {
+    it('should not deliver messages of wrong type', async () => {
       const received: AgentMessage[] = [];
 
-      bus.subscribe(AgentRole.ENGINEERING_MANAGER, [MessageType.REVIEW_REQUEST], (msg) => {
+      bus.subscribe(AgentRole.DEVELOPER, [MessageType.REVIEW_REQUEST], (msg) => {
         received.push(msg);
       });
 
       await bus.publish({
         id: uuidv4(),
         type: MessageType.TASK_ASSIGNMENT,
-        from: AgentRole.PRODUCT_MANAGER,
-        to: AgentRole.ENGINEERING_MANAGER,
-        subject: 'Task',
-        body: 'Task body',
+        from: AgentRole.PLANNER,
+        to: AgentRole.DEVELOPER,
+        subject: 'Wrong type',
+        body: 'Should not be delivered',
         priority: MessagePriority.NORMAL,
         timestamp: new Date(),
         metadata: {},
@@ -85,125 +85,176 @@ describe('MessageBus', () => {
 
       expect(received).toHaveLength(0);
     });
-  });
 
-  describe('send', () => {
-    it('should create and return a message', () => {
-      const msg = bus.send(
-        AgentRole.PRODUCT_MANAGER,
-        AgentRole.ENGINEERING_MANAGER,
-        MessageType.TASK_ASSIGNMENT,
-        'Test Subject',
-        'Test Body',
-      );
+    it('should deliver to multiple subscribers', async () => {
+      const received1: AgentMessage[] = [];
+      const received2: AgentMessage[] = [];
 
-      expect(msg.id).toBeDefined();
-      expect(msg.from).toBe(AgentRole.PRODUCT_MANAGER);
-      expect(msg.to).toBe(AgentRole.ENGINEERING_MANAGER);
-      expect(msg.subject).toBe('Test Subject');
-    });
-  });
+      bus.subscribe(AgentRole.REVIEWER, [MessageType.REVIEW_REQUEST], (msg) => {
+        received1.push(msg);
+      });
 
-  describe('reply', () => {
-    it('should create a reply message', () => {
-      const original = bus.send(
-        AgentRole.PRODUCT_MANAGER,
-        AgentRole.ENGINEERING_MANAGER,
-        MessageType.QUESTION,
-        'Question',
-        'What about this?',
-      );
+      bus.subscribe(AgentRole.REVIEWER, [MessageType.REVIEW_REQUEST], (msg) => {
+        received2.push(msg);
+      });
 
-      const reply = bus.reply(original, 'Here is the answer');
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.REVIEW_REQUEST,
+        from: AgentRole.DEVELOPER,
+        to: AgentRole.REVIEWER,
+        subject: 'Review needed',
+        body: 'Please review this',
+        priority: MessagePriority.HIGH,
+        timestamp: new Date(),
+        metadata: {},
+      });
 
-      expect(reply.from).toBe(AgentRole.ENGINEERING_MANAGER);
-      expect(reply.to).toBe(AgentRole.PRODUCT_MANAGER);
-      expect(reply.subject).toBe('Re: Question');
-    });
-  });
-
-  describe('broadcast', () => {
-    it('should send to all subscribers except sender', async () => {
-      const emReceived: AgentMessage[] = [];
-      const devReceived: AgentMessage[] = [];
-
-      bus.subscribe(AgentRole.ENGINEERING_MANAGER, [], (msg) => { emReceived.push(msg); });
-      bus.subscribe(AgentRole.SENIOR_DEVELOPER, [], (msg) => { devReceived.push(msg); });
-      bus.subscribe(AgentRole.PRODUCT_MANAGER, [], () => {});
-
-      await bus.broadcast(
-        AgentRole.PRODUCT_MANAGER,
-        MessageType.STATUS_UPDATE,
-        'Announcement',
-        'Important update',
-      );
-
-      expect(emReceived).toHaveLength(1);
-      expect(devReceived).toHaveLength(1);
-    });
-  });
-
-  describe('getMessagesFor', () => {
-    it('should return messages for a specific agent', () => {
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'Task 1', 'Body 1');
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'Task 2', 'Body 2');
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.SENIOR_DEVELOPER, MessageType.TASK_ASSIGNMENT, 'Task 3', 'Body 3');
-
-      const emMessages = bus.getMessagesFor(AgentRole.ENGINEERING_MANAGER);
-      expect(emMessages).toHaveLength(2);
-
-      const devMessages = bus.getMessagesFor(AgentRole.SENIOR_DEVELOPER);
-      expect(devMessages).toHaveLength(1);
-    });
-
-    it('should filter by type when specified', () => {
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'Task', 'Body');
-      bus.send(AgentRole.QA_ENGINEER, AgentRole.ENGINEERING_MANAGER, MessageType.REVIEW_REQUEST, 'Review', 'Body');
-
-      const tasks = bus.getMessagesFor(AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT);
-      expect(tasks).toHaveLength(1);
-    });
-  });
-
-  describe('getConversation', () => {
-    it('should return all messages between two agents', () => {
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.QUESTION, 'Q1', 'Body');
-      bus.send(AgentRole.ENGINEERING_MANAGER, AgentRole.PRODUCT_MANAGER, MessageType.ANSWER, 'A1', 'Body');
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.SENIOR_DEVELOPER, MessageType.QUESTION, 'Q2', 'Body');
-
-      const conversation = bus.getConversation(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER);
-      expect(conversation).toHaveLength(2);
-    });
-  });
-
-  describe('getStats', () => {
-    it('should return accurate message statistics', () => {
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'T1', 'B');
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'T2', 'B');
-      bus.send(AgentRole.QA_ENGINEER, AgentRole.ENGINEERING_MANAGER, MessageType.REVIEW_REQUEST, 'R1', 'B');
-
-      const stats = bus.getStats();
-      expect(stats.totalMessages).toBe(3);
-      expect(stats.byType[MessageType.TASK_ASSIGNMENT]).toBe(2);
-      expect(stats.byType[MessageType.REVIEW_REQUEST]).toBe(1);
-      expect(stats.byAgent[AgentRole.PRODUCT_MANAGER].sent).toBe(2);
-      expect(stats.byAgent[AgentRole.ENGINEERING_MANAGER].received).toBe(3);
+      expect(received1).toHaveLength(1);
+      expect(received2).toHaveLength(1);
     });
   });
 
   describe('unsubscribe', () => {
-    it('should stop delivering messages after unsubscribe', async () => {
+    it('should stop receiving messages after unsubscribing', async () => {
       const received: AgentMessage[] = [];
 
-      const subId = bus.subscribe(AgentRole.ENGINEERING_MANAGER, [], (msg) => {
+      const subId = bus.subscribe(AgentRole.ARCHITECT, [MessageType.TASK_ASSIGNMENT], (msg) => {
         received.push(msg);
       });
 
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'Before', 'B');
-      expect(received).toHaveLength(1);
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.TASK_ASSIGNMENT,
+        from: AgentRole.PLANNER,
+        to: AgentRole.ARCHITECT,
+        subject: 'First message',
+        body: 'Should be received',
+        priority: MessagePriority.NORMAL,
+        timestamp: new Date(),
+        metadata: {},
+      });
 
       bus.unsubscribe(subId);
-      bus.send(AgentRole.PRODUCT_MANAGER, AgentRole.ENGINEERING_MANAGER, MessageType.TASK_ASSIGNMENT, 'After', 'B');
+
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.TASK_ASSIGNMENT,
+        from: AgentRole.PLANNER,
+        to: AgentRole.ARCHITECT,
+        subject: 'Second message',
+        body: 'Should not be received',
+        priority: MessagePriority.NORMAL,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      expect(received).toHaveLength(1);
+      expect(received[0].subject).toBe('First message');
+    });
+  });
+
+  describe('getFullLog', () => {
+    it('should track message log', async () => {
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.STATUS_UPDATE,
+        from: AgentRole.DEVELOPER,
+        to: AgentRole.PLANNER,
+        subject: 'Update 1',
+        body: 'First update',
+        priority: MessagePriority.LOW,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.STATUS_UPDATE,
+        from: AgentRole.ARCHITECT,
+        to: AgentRole.PLANNER,
+        subject: 'Update 2',
+        body: 'Second update',
+        priority: MessagePriority.LOW,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      const log = bus.getFullLog();
+      expect(log).toHaveLength(2);
+    });
+
+    it('should get messages from specific agent', async () => {
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.STATUS_UPDATE,
+        from: AgentRole.DEVELOPER,
+        to: AgentRole.PLANNER,
+        subject: 'From developer',
+        body: 'Test',
+        priority: MessagePriority.LOW,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.STATUS_UPDATE,
+        from: AgentRole.OPERATOR,
+        to: AgentRole.PLANNER,
+        subject: 'From operator',
+        body: 'Test',
+        priority: MessagePriority.LOW,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      const devMessages = bus.getMessagesFrom(AgentRole.DEVELOPER);
+      expect(devMessages).toHaveLength(1);
+      expect(devMessages[0].from).toBe(AgentRole.DEVELOPER);
+    });
+  });
+
+  describe('clear', () => {
+    it('should clear all log and subscriptions', async () => {
+      const received: AgentMessage[] = [];
+
+      bus.subscribe(AgentRole.REVIEWER, [MessageType.REVIEW_REQUEST], (msg) => {
+        received.push(msg);
+      });
+
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.REVIEW_REQUEST,
+        from: AgentRole.DEVELOPER,
+        to: AgentRole.REVIEWER,
+        subject: 'Before clear',
+        body: 'Test',
+        priority: MessagePriority.NORMAL,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      expect(bus.getFullLog()).toHaveLength(1);
+      expect(received).toHaveLength(1);
+
+      bus.clear();
+
+      expect(bus.getFullLog()).toHaveLength(0);
+
+      await bus.publish({
+        id: uuidv4(),
+        type: MessageType.REVIEW_REQUEST,
+        from: AgentRole.DEVELOPER,
+        to: AgentRole.REVIEWER,
+        subject: 'After clear',
+        body: 'Test',
+        priority: MessagePriority.NORMAL,
+        timestamp: new Date(),
+        metadata: {},
+      });
+
+      expect(bus.getFullLog()).toHaveLength(1);
       expect(received).toHaveLength(1);
     });
   });

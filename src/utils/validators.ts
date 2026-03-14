@@ -2,13 +2,13 @@ import {
   type Artifact,
   ArtifactType,
   AgentRole,
-  PipelineStage,
   type Feature,
-  type StageResult,
-  StageStatus,
+  type StepResult,
   type HandoffPayload,
   type Issue,
   IssueSeverity,
+  type ExecutionStep,
+  type ExecutionPlan,
 } from '../types';
 
 export class ValidationError extends Error {
@@ -56,8 +56,8 @@ export function validateHandoff(handoff: HandoffPayload): ValidationError[] {
   if (handoff.fromAgent === handoff.toAgent) {
     errors.push(new ValidationError('Cannot hand off to the same agent', 'toAgent', handoff.toAgent));
   }
-  if (!Object.values(PipelineStage).includes(handoff.stage)) {
-    errors.push(new ValidationError('Invalid pipeline stage', 'stage', handoff.stage));
+  if (!handoff.step || handoff.step.trim().length === 0) {
+    errors.push(new ValidationError('Step identifier is required', 'step', handoff.step));
   }
   if (!handoff.context || handoff.context.trim().length === 0) {
     errors.push(new ValidationError('Handoff context is required', 'context', ''));
@@ -69,37 +69,55 @@ export function validateHandoff(handoff: HandoffPayload): ValidationError[] {
   return errors;
 }
 
-export function validateStageTransition(
-  feature: Feature,
-  from: PipelineStage,
-  to: PipelineStage,
+export function validateStepTransition(
+  plan: ExecutionPlan,
+  fromStepIndex: number,
+  toStepIndex: number,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
-  const stageOrder = Object.values(PipelineStage);
-  const fromIndex = stageOrder.indexOf(from);
-  const toIndex = stageOrder.indexOf(to);
 
-  if (fromIndex === -1) {
-    errors.push(new ValidationError('Invalid source stage', 'from', from));
+  if (fromStepIndex < 0 || fromStepIndex >= plan.steps.length) {
+    errors.push(new ValidationError('Invalid source step index', 'fromStepIndex', fromStepIndex));
   }
-  if (toIndex === -1) {
-    errors.push(new ValidationError('Invalid target stage', 'to', to));
-  }
-  if (toIndex > fromIndex + 1) {
-    errors.push(new ValidationError(
-      `Cannot skip stages: ${from} -> ${to}. Stages in between must be completed or explicitly skipped.`,
-      'transition',
-      `${from}->${to}`,
-    ));
+  if (toStepIndex < 0 || toStepIndex >= plan.steps.length) {
+    errors.push(new ValidationError('Invalid target step index', 'toStepIndex', toStepIndex));
   }
 
-  const currentResult = feature.stageResults.get(from);
-  if (currentResult && currentResult.status !== StageStatus.APPROVED && currentResult.status !== StageStatus.SKIPPED) {
-    errors.push(new ValidationError(
-      `Current stage ${from} must be approved before transitioning`,
-      'stageStatus',
-      currentResult.status,
-    ));
+  const fromStep = plan.steps[fromStepIndex];
+  const toStep = plan.steps[toStepIndex];
+
+  if (fromStep && toStep && toStep.dependsOn) {
+    const unmetDependencies = toStep.dependsOn.filter(depIdx => {
+      const depStep = plan.steps[depIdx];
+      return depStep && (depStep as any).status !== 'completed';
+    });
+
+    if (unmetDependencies.length > 0) {
+      errors.push(new ValidationError(
+        `Cannot transition to step ${toStepIndex}: unmet dependencies at steps ${unmetDependencies.join(', ')}`,
+        'dependencies',
+        unmetDependencies,
+      ));
+    }
+  }
+
+  return errors;
+}
+
+export function validateExecutionStep(step: ExecutionStep): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  if (step.index < 0) {
+    errors.push(new ValidationError('Step index must be non-negative', 'index', step.index));
+  }
+  if (!Object.values(AgentRole).includes(step.agent)) {
+    errors.push(new ValidationError('Invalid agent role', 'agent', step.agent));
+  }
+  if (!step.skills || step.skills.length === 0) {
+    errors.push(new ValidationError('Step must have at least one skill', 'skills', step.skills));
+  }
+  if (!step.description || step.description.trim().length === 0) {
+    errors.push(new ValidationError('Step description is required', 'description', step.description));
   }
 
   return errors;
@@ -122,8 +140,8 @@ export function validateFeatureDescription(description: string): ValidationError
   return errors;
 }
 
-export function hasBlockingIssues(stageResult: StageResult): boolean {
-  return stageResult.issues.some(
+export function hasBlockingIssues(stepResult: StepResult): boolean {
+  return stepResult.issues.some(
     (issue: Issue) =>
       issue.severity === IssueSeverity.CRITICAL ||
       issue.severity === IssueSeverity.HIGH,

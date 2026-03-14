@@ -7,16 +7,18 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { prompt } from 'enquirer';
 import {
-  PipelineStage,
   FeaturePriority,
   FeatureStatus,
   AgentRole,
+  StepStatus,
+  type PipelineResult,
+  type Feature,
 } from './types';
 import { loadConfig, saveConfig, getDefaultConfig, CDMConfig } from './utils/config';
 import logger, { addFileTransport, pipelineLog } from './utils/logger';
 import { ArtifactStore } from './workspace/artifact-store';
 import { ProjectContext } from './orchestrator/context';
-import { PipelineOrchestrator, type PipelineOptions, type PipelineResult } from './orchestrator/pipeline';
+import { PipelineOrchestrator, type PipelineOptions } from './orchestrator/pipeline';
 import { ClaudeCodeBridge, type ExecutionMode, type ProjectSnapshot } from './orchestrator/claude-code-bridge';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 import { CodeStyleProfiler } from './analyzer/codestyle-profiler';
@@ -82,14 +84,16 @@ program
   .description('Start the development pipeline for a new feature')
   .argument('<description>', 'Feature description')
   .option('-p, --priority <priority>', 'Feature priority (low|medium|high|critical)', 'medium')
-  .option('--skip <stages>', 'Comma-separated stages to skip', '')
-  .option('--max-retries <n>', 'Maximum retries per stage', '2')
+  .option('-t, --template <name>', 'Pipeline template (quick-fix|feature|full-feature|review-only|design-only|deploy)')
+  .option('--skip-steps <steps>', 'Comma-separated step indices to skip', '')
+  .option('--max-retries <n>', 'Maximum retries per step', '2')
   .option('--dry-run', 'Show what would happen without executing', false)
   .option('--no-interactive', 'Run without interactive prompts')
   .option('--project <path>', 'Project path', process.cwd())
   .option('--mode <mode>', 'Execution mode: claude-cli or simulation', 'claude-cli')
   .option('--model <model>', 'Claude model to use (e.g. claude-sonnet-4-20250514)')
   .option('-v, --verbose', 'Verbose output', false)
+  .option('--json', 'Output result as JSON', false)
   .action(async (description: string, opts: any) => {
     const projectPath = opts.project;
     guardSelfInit(projectPath);
@@ -111,7 +115,11 @@ program
 
     console.log(chalk.white(`Project: ${chalk.bold(project.name)}`));
     console.log(chalk.white(`Language: ${project.config.language} | Framework: ${project.config.framework}`));
-    console.log(chalk.white(`Feature: ${chalk.bold(description)}\n`));
+    console.log(chalk.white(`Feature: ${chalk.bold(description)}`));
+    if (opts.template) {
+      console.log(chalk.white(`Template: ${chalk.bold(opts.template)}`));
+    }
+    console.log();
 
     if (!isRtkInstalled()) {
       console.error(chalk.gray('Tip: Install rtk to reduce agent token usage by 60-90%: brew install rtk'));
@@ -120,41 +128,32 @@ program
     const priority = mapPriority(opts.priority);
     const feature = context.createFeature(description, description, priority);
 
-    const skipStages = opts.skip
-      ? opts.skip.split(',').map((s: string) => s.trim() as PipelineStage)
+    const skipSteps = opts.skipSteps
+      ? opts.skipSteps.split(',').map((s: string) => s.trim())
       : [];
 
     const pipelineOptions: PipelineOptions = {
-      skipStages,
+      skipSteps,
+      template: opts.template,
       maxRetries: parseInt(opts.maxRetries, 10),
       dryRun: opts.dryRun,
       interactive: opts.interactive !== false,
-      onStageStart: (stage) => {
-        const icon = getStageIcon(stage);
-        spinner.start(chalk.cyan(`${icon} ${formatStageName(stage)}...`));
+      onStepStart: (step) => {
+        spinner.start(chalk.cyan(`Step ${step.index}: ${step.description}...`));
       },
-      onStageComplete: (stage, result) => {
-        const icon = getStageIcon(stage);
-        if (result.status === 'approved') {
-          spinner.succeed(chalk.green(`${icon} ${formatStageName(stage)} — ${result.artifacts.length} artifacts, ${result.issues.length} issues`));
-        } else if (result.status === 'skipped') {
-          spinner.info(chalk.yellow(`${icon} ${formatStageName(stage)} — Skipped`));
-        } else {
-          spinner.fail(chalk.red(`${icon} ${formatStageName(stage)} — ${result.status}`));
-        }
+      onStepComplete: (step) => {
+        spinner.succeed(chalk.green(`Step ${step.index}: ${step.description}`));
       },
       onAgentWork: (role, task) => {
-        spinner.text = chalk.cyan(`  ${getAgentIcon(role)} ${formatAgentName(role)}: ${task.title}`);
+        spinner.text = chalk.cyan(`  ${getAgentIcon(role)} ${formatAgentName(role)}: ${(task as any).title}`);
       },
-      onError: (stage, error) => {
-        spinner.fail(chalk.red(`Error in ${stage}: ${error.message}`));
+      onError: (stepIndex, error) => {
+        spinner.fail(chalk.red(`Error at step ${stepIndex}: ${error.message}`));
       },
     };
 
     if (opts.dryRun) {
-      console.log(chalk.yellow('\n📋 DRY RUN — Pipeline stages that would execute:\n'));
-      printPipelinePlan(skipStages);
-      return;
+      console.log(chalk.yellow('\n📋 DRY RUN — Pipeline will analyze task and show plan:\n'));
     }
 
     const analysisDir = path.join(projectPath, '.cdm', 'analysis');
@@ -173,7 +172,11 @@ program
 
     try {
       const result = await orchestrator.runFeaturePipeline(feature, pipelineOptions);
-      printPipelineResult(result);
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        printPipelineResult(result);
+      }
     } catch (error) {
       spinner.fail(chalk.red('Pipeline failed'));
       console.error(chalk.red(`\nError: ${error instanceof Error ? error.message : error}`));
@@ -206,7 +209,7 @@ program
       console.log(`${statusColor('●')} ${chalk.bold(feature.name)}`);
       console.log(`  ID: ${chalk.gray(feature.id)}`);
       console.log(`  Status: ${statusColor(feature.status)}`);
-      console.log(`  Stage: ${feature.currentStage}`);
+      console.log(`  Step: ${feature.currentStep}`);
       console.log(`  Created: ${feature.createdAt.toLocaleDateString()}`);
       console.log(`  Artifacts: ${feature.artifacts.length}`);
       console.log(`  Issues: ${feature.issues.length}`);
@@ -218,45 +221,127 @@ program
 
 program
   .command('agents')
-  .description('List all available agents and their roles')
-  .action(() => {
-    console.log(chalk.bold.cyan('\n👥 Agent Team\n'));
-
+  .description('List all available agents and their skills')
+  .option('--json', 'Output as JSON', false)
+  .action((opts: any) => {
     const agents = [
-      { role: AgentRole.PRODUCT_MANAGER, icon: '📋', title: 'Product Manager', desc: 'Requirements, user stories, acceptance criteria' },
-      { role: AgentRole.BUSINESS_ANALYST, icon: '📊', title: 'Business Analyst', desc: 'ROI analysis, business cases, KPIs, market research' },
-      { role: AgentRole.ENGINEERING_MANAGER, icon: '👔', title: 'Engineering Manager', desc: 'Task breakdown, sprint planning, coordination' },
-      { role: AgentRole.SOLUTIONS_ARCHITECT, icon: '🔧', title: 'Solutions Architect', desc: 'Technology decisions, integration design, migration planning' },
-      { role: AgentRole.SYSTEM_ARCHITECT, icon: '🏗️', title: 'System Architect', desc: 'Architecture, API design, data modeling' },
-      { role: AgentRole.UI_DESIGNER, icon: '🎨', title: 'UI/UX Designer', desc: 'Interface design, wireframes, components' },
-      { role: AgentRole.SENIOR_DEVELOPER, icon: '💻', title: 'Senior Developer', desc: 'Complex features, core code, architecture implementation' },
-      { role: AgentRole.JUNIOR_DEVELOPER, icon: '🔧', title: 'Junior Developer', desc: 'Simpler features, utilities, unit tests' },
-      { role: AgentRole.DATABASE_ENGINEER, icon: '🗄️', title: 'Database Engineer', desc: 'Schema design, migrations, query optimization' },
-      { role: AgentRole.CODE_REVIEWER, icon: '🔍', title: 'Code Reviewer', desc: 'Code quality, best practices, standards' },
-      { role: AgentRole.QA_ENGINEER, icon: '🧪', title: 'QA Engineer', desc: 'Test plans, all test levels, quality assurance' },
-      { role: AgentRole.PERFORMANCE_ENGINEER, icon: '⚡', title: 'Performance Engineer', desc: 'Load testing, profiling, bottleneck analysis' },
-      { role: AgentRole.SECURITY_ENGINEER, icon: '🔒', title: 'Security Engineer', desc: 'Security audit, vulnerability assessment' },
-      { role: AgentRole.COMPLIANCE_OFFICER, icon: '📜', title: 'Compliance Officer', desc: 'GDPR, HIPAA, SOC2, PCI-DSS, privacy assessments' },
-      { role: AgentRole.ACCESSIBILITY_SPECIALIST, icon: '♿', title: 'Accessibility Specialist', desc: 'WCAG compliance, screen reader support, a11y testing' },
-      { role: AgentRole.SRE_ENGINEER, icon: '🔥', title: 'SRE Engineer', desc: 'Reliability, incident response, chaos engineering, capacity planning' },
-      { role: AgentRole.DEVOPS_ENGINEER, icon: '🚀', title: 'DevOps Engineer', desc: 'CI/CD, deployment, infrastructure' },
-      { role: AgentRole.DOCUMENTATION_WRITER, icon: '📚', title: 'Documentation Writer', desc: 'API docs, guides, changelogs' },
+      {
+        role: AgentRole.PLANNER,
+        icon: '📋',
+        title: 'Planner',
+        desc: 'Analyzes tasks, creates execution plans, classifies work type',
+        skills: ['requirements-analysis', 'task-decomposition'],
+      },
+      {
+        role: AgentRole.ARCHITECT,
+        icon: '🏗️',
+        title: 'Architect',
+        desc: 'Designs systems, APIs, data models, and UI specifications',
+        skills: ['system-design', 'api-design', 'data-modeling', 'ui-design'],
+      },
+      {
+        role: AgentRole.DEVELOPER,
+        icon: '💻',
+        title: 'Developer',
+        desc: 'Writes production code, tests, and documentation',
+        skills: ['code-implementation', 'test-writing', 'documentation'],
+      },
+      {
+        role: AgentRole.REVIEWER,
+        icon: '🔍',
+        title: 'Reviewer',
+        desc: 'Reviews code quality, security, performance, and accessibility',
+        skills: ['code-review', 'security-audit', 'performance-analysis', 'accessibility-audit', 'test-validation'],
+      },
+      {
+        role: AgentRole.OPERATOR,
+        icon: '🚀',
+        title: 'Operator',
+        desc: 'Handles CI/CD, deployment, and monitoring configuration',
+        skills: ['ci-cd', 'deployment', 'monitoring'],
+      },
     ];
+
+    if (opts.json) {
+      console.log(JSON.stringify(agents, null, 2));
+      return;
+    }
+
+    console.log(chalk.bold.cyan('\n👥 Agent Team (5 Agents + 17 Skills)\n'));
 
     for (const agent of agents) {
       console.log(`  ${agent.icon} ${chalk.bold(agent.title)}`);
       console.log(`     ${chalk.gray(agent.desc)}`);
+      console.log(`     Skills: ${chalk.cyan(agent.skills.join(', '))}`);
+      console.log();
     }
 
-    console.log(chalk.gray('\n  Team hierarchy:'));
-    console.log(chalk.gray('  Product Manager → Business Analyst'));
-    console.log(chalk.gray('  Product Manager → Engineering Manager → Developers'));
-    console.log(chalk.gray('  Product Manager → UI/UX Designer'));
-    console.log(chalk.gray('  Engineering Manager → Solutions Architect, System Architect'));
-    console.log(chalk.gray('  Engineering Manager → Database Engineer'));
-    console.log(chalk.gray('  Engineering Manager → Code Reviewer, QA, Performance Engineer'));
-    console.log(chalk.gray('  Engineering Manager → Security Engineer, Compliance Officer, Accessibility Specialist'));
-    console.log(chalk.gray('  Engineering Manager → SRE Engineer, DevOps Engineer, Docs\n'));
+    console.log(chalk.gray('  Run `cdm skills` to see all available skills.\n'));
+  });
+
+// ─── cdm skills ─────────────────────────────────────────────────────────────
+
+program
+  .command('skills')
+  .description('List all available skills')
+  .option('--category <cat>', 'Filter by category (planning|design|build|review|operations)')
+  .option('--json', 'Output as JSON', false)
+  .action((opts: any) => {
+    const skills = [
+      { id: 'requirements-analysis', name: 'Requirements Analysis', category: 'planning', agents: ['planner'] },
+      { id: 'task-decomposition', name: 'Task Decomposition', category: 'planning', agents: ['planner'] },
+      { id: 'system-design', name: 'System Design', category: 'design', agents: ['architect'] },
+      { id: 'api-design', name: 'API Design', category: 'design', agents: ['architect'] },
+      { id: 'data-modeling', name: 'Data Modeling', category: 'design', agents: ['architect'] },
+      { id: 'ui-design', name: 'UI Design', category: 'design', agents: ['architect'] },
+      { id: 'code-implementation', name: 'Code Implementation', category: 'build', agents: ['developer'] },
+      { id: 'test-writing', name: 'Test Writing', category: 'build', agents: ['developer'] },
+      { id: 'documentation', name: 'Documentation', category: 'build', agents: ['developer'] },
+      { id: 'code-review', name: 'Code Review', category: 'review', agents: ['reviewer'] },
+      { id: 'security-audit', name: 'Security Audit', category: 'review', agents: ['reviewer'] },
+      { id: 'performance-analysis', name: 'Performance Analysis', category: 'review', agents: ['reviewer'] },
+      { id: 'accessibility-audit', name: 'Accessibility Audit', category: 'review', agents: ['reviewer'] },
+      { id: 'test-validation', name: 'Test Validation', category: 'review', agents: ['reviewer'] },
+      { id: 'ci-cd', name: 'CI/CD Pipeline', category: 'operations', agents: ['operator'] },
+      { id: 'deployment', name: 'Deployment', category: 'operations', agents: ['operator'] },
+      { id: 'monitoring', name: 'Monitoring', category: 'operations', agents: ['operator'] },
+    ];
+
+    let filtered = skills;
+    if (opts.category) {
+      filtered = skills.filter(s => s.category === opts.category);
+    }
+
+    if (opts.json) {
+      console.log(JSON.stringify(filtered, null, 2));
+      return;
+    }
+
+    console.log(chalk.bold.cyan('\n🧩 Available Skills\n'));
+
+    const categories = ['planning', 'design', 'build', 'review', 'operations'];
+    const categoryIcons: Record<string, string> = {
+      planning: '📋',
+      design: '🏗️',
+      build: '💻',
+      review: '🔍',
+      operations: '🚀',
+    };
+
+    for (const cat of categories) {
+      if (opts.category && opts.category !== cat) continue;
+      
+      const catSkills = filtered.filter(s => s.category === cat);
+      if (catSkills.length === 0) continue;
+
+      console.log(chalk.bold(`  ${categoryIcons[cat]} ${cat.charAt(0).toUpperCase() + cat.slice(1)}`));
+      for (const skill of catSkills) {
+        console.log(`     ${chalk.cyan(skill.id)} — ${skill.name}`);
+      }
+      console.log();
+    }
+
+    console.log(chalk.gray(`  Total: ${filtered.length} skills\n`));
   });
 
 // ─── cdm init ────────────────────────────────────────────────────────────────
@@ -402,10 +487,10 @@ program
 
 program
   .command('resume')
-  .description('Resume a failed or paused feature pipeline from its last stage')
+  .description('Resume a failed or paused feature pipeline from its last incomplete step')
   .argument('[feature-id]', 'Feature ID to resume (uses most recent if omitted)')
-  .option('--skip <stages>', 'Comma-separated stages to skip', '')
-  .option('--max-retries <n>', 'Maximum retries per stage', '2')
+  .option('--skip-steps <steps>', 'Comma-separated step indices to skip', '')
+  .option('--max-retries <n>', 'Maximum retries per step', '2')
   .option('--project <path>', 'Project path', process.cwd())
   .option('--mode <mode>', 'Execution mode: claude-cli or simulation', 'claude-cli')
   .option('--model <model>', 'Claude model to use')
@@ -441,49 +526,41 @@ program
     console.log(chalk.bold.cyan('\n🔄 Resuming Pipeline'));
     console.log(chalk.white(`Feature: ${chalk.bold(feature.name)}`));
     console.log(chalk.white(`Status:  ${feature.status}`));
-    console.log(chalk.white(`Stage:   ${feature.currentStage}\n`));
+    console.log(chalk.white(`Step:    ${feature.currentStep}\n`));
 
     if (!isRtkInstalled()) {
       console.error(chalk.gray('Tip: Install rtk to reduce agent token usage by 60-90%: brew install rtk'));
     }
 
-    const nextStage = findResumeStage(feature.currentStage, feature);
-    if (!nextStage) {
-      console.log(chalk.yellow('This feature has already completed all stages.'));
+    const nextStep = findResumeStep(feature);
+    if (nextStep === null) {
+      console.log(chalk.yellow('This feature has already completed all steps.'));
       return;
     }
 
-    console.log(chalk.white(`Resuming from: ${chalk.bold(formatStageName(nextStage))}\n`));
+    console.log(chalk.white(`Resuming from: ${chalk.bold(`Step ${nextStep}`)}\n`));
 
-    const skipStages = opts.skip
-      ? opts.skip.split(',').map((s: string) => s.trim() as PipelineStage)
+    const skipSteps = opts.skipSteps
+      ? opts.skipSteps.split(',').map((s: string) => s.trim())
       : [];
 
     const pipelineOptions: PipelineOptions = {
-      skipStages,
+      skipSteps,
       maxRetries: parseInt(opts.maxRetries, 10),
       dryRun: false,
       interactive: true,
-      startFromStage: nextStage,
-      onStageStart: (stage) => {
-        const icon = getStageIcon(stage);
-        spinner.start(chalk.cyan(`${icon} ${formatStageName(stage)}...`));
+      startFromStep: nextStep,
+      onStepStart: (step) => {
+        spinner.start(chalk.cyan(`Step ${step.index}: ${step.description}...`));
       },
-      onStageComplete: (stage, result) => {
-        const icon = getStageIcon(stage);
-        if (result.status === 'approved') {
-          spinner.succeed(chalk.green(`${icon} ${formatStageName(stage)} — ${result.artifacts.length} artifacts, ${result.issues.length} issues`));
-        } else if (result.status === 'skipped') {
-          spinner.info(chalk.yellow(`${icon} ${formatStageName(stage)} — Skipped`));
-        } else {
-          spinner.fail(chalk.red(`${icon} ${formatStageName(stage)} — ${result.status}`));
-        }
+      onStepComplete: (step) => {
+        spinner.succeed(chalk.green(`Step ${step.index}: ${step.description}`));
       },
       onAgentWork: (role, task) => {
-        spinner.text = chalk.cyan(`  ${getAgentIcon(role)} ${formatAgentName(role)}: ${task.title}`);
+        spinner.text = chalk.cyan(`  ${getAgentIcon(role)} ${formatAgentName(role)}: ${(task as any).title}`);
       },
-      onError: (stage, error) => {
-        spinner.fail(chalk.red(`Error in ${stage}: ${error.message}`));
+      onError: (stepIndex, error) => {
+        spinner.fail(chalk.red(`Error at step ${stepIndex}: ${error.message}`));
       },
     };
 
@@ -536,7 +613,7 @@ program
       console.log(chalk.bold.cyan(`\n📋 Feature: ${feature.name}\n`));
       console.log(chalk.white(`  ID:       ${chalk.gray(feature.id)}`));
       console.log(chalk.white(`  Status:   ${feature.status}`));
-      console.log(chalk.white(`  Stage:    ${feature.currentStage}`));
+      console.log(chalk.white(`  Step:     ${feature.currentStep}`));
       console.log(chalk.white(`  Priority: ${feature.priority}`));
       console.log(chalk.white(`  Created:  ${feature.createdAt}`));
 
@@ -556,13 +633,13 @@ program
         }
       }
 
-      const stageResults = Array.from(feature.stageResults.entries());
-      if (stageResults.length > 0) {
-        console.log(chalk.bold('\n  Stage History:'));
-        for (const [stage, result] of stageResults) {
-          const statusIcon = result.status === 'approved' ? chalk.green('✓') :
+      const stepResults = Array.from(feature.stepResults.entries());
+      if (stepResults.length > 0) {
+        console.log(chalk.bold('\n  Step History:'));
+        for (const [stepIndex, result] of stepResults) {
+          const statusIcon = result.status === 'completed' ? chalk.green('✓') :
             result.status === 'failed' ? chalk.red('✗') : chalk.yellow('~');
-          console.log(`    ${statusIcon} ${formatStageName(stage)} — ${result.status} (${result.artifacts.length} artifacts, ${result.issues.length} issues)`);
+          console.log(`    ${statusIcon} Step ${stepIndex}: ${result.skills.join(', ')} — ${result.status} (${result.artifacts.length} artifacts, ${result.issues.length} issues)`);
         }
       }
 
@@ -620,7 +697,7 @@ program
     console.log(`  Max retries:    ${config.pipeline.maxRetries}`);
     console.log(`  Timeout (min):  ${config.pipeline.timeoutMinutes}`);
     console.log(`  Approvals:      ${config.pipeline.requireApprovals}`);
-    console.log(`  Skip stages:    ${config.pipeline.skipStages.join(', ') || 'none'}`);
+    console.log(`  Skip steps:     ${config.pipeline.skipSteps.join(', ') || 'none'}`);
 
     console.log(chalk.bold('\nAgents:'));
     for (const [role, override] of Object.entries(config.agents)) {
@@ -726,7 +803,7 @@ program
 
     console.log(chalk.bold('Summary:'));
     console.log(`  Features:     ${summary.totalFeatures} (${chalk.green(String(summary.completedFeatures))} completed, ${chalk.red(String(summary.failedFeatures))} failed)`);
-    console.log(`  Stages run:   ${summary.totalStagesExecuted}`);
+    console.log(`  Steps run:    ${summary.totalStepsExecuted}`);
     console.log(`  Artifacts:    ${summary.totalArtifactsProduced}`);
     console.log(`  Issues:       ${summary.totalIssuesFound} found, ${summary.totalIssuesResolved} resolved`);
     console.log(`  Tokens:       ${summary.totalTokensUsed.toLocaleString()}`);
@@ -766,10 +843,83 @@ program
 
 program
   .command('pipeline')
-  .description('Show the pipeline configuration')
-  .action(() => {
-    console.log(chalk.bold.cyan('\n🔄 Development Pipeline\n'));
-    printPipelinePlan([]);
+  .description('Show available pipeline templates')
+  .option('--template <name>', 'Show details for a specific template')
+  .option('--json', 'Output as JSON', false)
+  .action((opts: any) => {
+    const templates = [
+      {
+        id: 'quick-fix',
+        name: 'Quick Fix',
+        desc: 'For bugs, typos, and small tweaks',
+        steps: ['Developer[code-implementation]', 'Reviewer[code-review]'],
+      },
+      {
+        id: 'feature',
+        name: 'Feature',
+        desc: 'Standard feature development',
+        steps: ['Planner[requirements-analysis]', 'Architect[system-design, api-design]', 'Developer[code-implementation, test-writing]', 'Reviewer[code-review]'],
+      },
+      {
+        id: 'full-feature',
+        name: 'Full Feature',
+        desc: 'Feature with security and deployment',
+        steps: ['Planner[requirements-analysis]', 'Architect[system-design, api-design, data-modeling]', 'Developer[code-implementation, test-writing, documentation]', 'Reviewer[code-review]', 'Reviewer[security-audit]', 'Operator[deployment, monitoring]'],
+      },
+      {
+        id: 'review-only',
+        name: 'Review Only',
+        desc: 'For audits and assessments',
+        steps: ['Reviewer[code-review, security-audit, performance-analysis]'],
+      },
+      {
+        id: 'design-only',
+        name: 'Design Only',
+        desc: 'Architecture spike or RFC',
+        steps: ['Planner[requirements-analysis]', 'Architect[system-design, data-modeling]'],
+      },
+      {
+        id: 'deploy',
+        name: 'Deploy',
+        desc: 'Deploy existing code',
+        steps: ['Operator[ci-cd, deployment, monitoring]'],
+      },
+    ];
+
+    if (opts.json) {
+      console.log(JSON.stringify(templates, null, 2));
+      return;
+    }
+
+    console.log(chalk.bold.cyan('\n🔄 Pipeline Templates\n'));
+
+    if (opts.template) {
+      const t = templates.find(t => t.id === opts.template);
+      if (!t) {
+        console.log(chalk.red(`Template "${opts.template}" not found.`));
+        console.log(chalk.gray(`Available: ${templates.map(t => t.id).join(', ')}`));
+        process.exit(1);
+      }
+
+      console.log(chalk.bold(`  ${t.name} (${t.id})`));
+      console.log(chalk.gray(`  ${t.desc}\n`));
+      console.log(chalk.bold('  Steps:'));
+      t.steps.forEach((step, i) => {
+        console.log(`    ${i}. ${step}`);
+      });
+      console.log();
+      return;
+    }
+
+    for (const t of templates) {
+      console.log(`  ${chalk.bold(t.id.padEnd(15))} ${t.name}`);
+      console.log(`  ${' '.repeat(15)} ${chalk.gray(t.desc)}`);
+      console.log(`  ${' '.repeat(15)} ${chalk.cyan(t.steps.length + ' steps')}`);
+      console.log();
+    }
+
+    console.log(chalk.gray('  Use --template <name> to see template details.'));
+    console.log(chalk.gray('  Use `cdm start "task" --template <name>` to use a specific template.\n'));
   });
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
@@ -784,106 +934,58 @@ function mapPriority(p: string): FeaturePriority {
   return map[p.toLowerCase()] ?? FeaturePriority.MEDIUM;
 }
 
-function getStageIcon(stage: PipelineStage): string {
-  const icons: Record<string, string> = {
-    [PipelineStage.REQUIREMENTS_GATHERING]: '📋',
-    [PipelineStage.ARCHITECTURE_DESIGN]: '🏗️',
-    [PipelineStage.UI_UX_DESIGN]: '🎨',
-    [PipelineStage.TASK_BREAKDOWN]: '📝',
-    [PipelineStage.IMPLEMENTATION]: '💻',
-    [PipelineStage.CODE_REVIEW]: '🔍',
-    [PipelineStage.TESTING]: '🧪',
-    [PipelineStage.SECURITY_REVIEW]: '🔒',
-    [PipelineStage.DOCUMENTATION]: '📚',
-    [PipelineStage.DEPLOYMENT]: '🚀',
-    [PipelineStage.COMPLETED]: '✅',
-  };
-  return icons[stage] ?? '▶️';
+function getStepIcon(stepIndex: number): string {
+  return `${stepIndex + 1}️⃣`;
 }
 
 function getAgentIcon(role: AgentRole): string {
   const icons: Record<string, string> = {
-    [AgentRole.PRODUCT_MANAGER]: '📋',
-    [AgentRole.ENGINEERING_MANAGER]: '👔',
-    [AgentRole.SYSTEM_ARCHITECT]: '🏗️',
-    [AgentRole.UI_DESIGNER]: '🎨',
-    [AgentRole.SENIOR_DEVELOPER]: '💻',
-    [AgentRole.JUNIOR_DEVELOPER]: '🔧',
-    [AgentRole.CODE_REVIEWER]: '🔍',
-    [AgentRole.QA_ENGINEER]: '🧪',
-    [AgentRole.SECURITY_ENGINEER]: '🔒',
-    [AgentRole.DEVOPS_ENGINEER]: '🚀',
-    [AgentRole.DOCUMENTATION_WRITER]: '📚',
+    [AgentRole.PLANNER]: '📋',
+    [AgentRole.ARCHITECT]: '🏗️',
+    [AgentRole.DEVELOPER]: '💻',
+    [AgentRole.REVIEWER]: '🔍',
+    [AgentRole.OPERATOR]: '🚀',
   };
   return icons[role] ?? '🤖';
 }
 
-function formatStageName(stage: PipelineStage): string {
-  return stage.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+function formatStepName(stepId: string): string {
+  return stepId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function formatAgentName(role: AgentRole): string {
   return role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function printPipelinePlan(skipStages: PipelineStage[]): void {
-  const stages = [
-    { stage: PipelineStage.REQUIREMENTS_GATHERING, icon: '📋', agent: 'Product Manager' },
-    { stage: PipelineStage.ARCHITECTURE_DESIGN, icon: '🏗️', agent: 'System Architect' },
-    { stage: PipelineStage.UI_UX_DESIGN, icon: '🎨', agent: 'UI/UX Designer' },
-    { stage: PipelineStage.TASK_BREAKDOWN, icon: '📝', agent: 'Engineering Manager' },
-    { stage: PipelineStage.IMPLEMENTATION, icon: '💻', agent: 'Senior + Junior Developer' },
-    { stage: PipelineStage.CODE_REVIEW, icon: '🔍', agent: 'Code Reviewer' },
-    { stage: PipelineStage.TESTING, icon: '🧪', agent: 'QA Engineer' },
-    { stage: PipelineStage.SECURITY_REVIEW, icon: '🔒', agent: 'Security Engineer' },
-    { stage: PipelineStage.DOCUMENTATION, icon: '📚', agent: 'Documentation Writer' },
-    { stage: PipelineStage.DEPLOYMENT, icon: '🚀', agent: 'DevOps Engineer' },
+function printPipelinePlan(skipSteps: string[]): void {
+  console.log(chalk.bold('  Available Templates:\n'));
+  
+  const templates = [
+    { id: 'quick-fix', steps: 2, desc: 'Developer → Reviewer' },
+    { id: 'feature', steps: 4, desc: 'Planner → Architect → Developer → Reviewer' },
+    { id: 'full-feature', steps: 6, desc: 'feature + Security + Operator' },
+    { id: 'review-only', steps: 1, desc: 'Reviewer (multi-skill)' },
+    { id: 'design-only', steps: 2, desc: 'Planner → Architect' },
+    { id: 'deploy', steps: 1, desc: 'Operator' },
   ];
 
-  for (let i = 0; i < stages.length; i++) {
-    const s = stages[i];
-    const skipped = skipStages.includes(s.stage);
-    const num = `${i + 1}.`.padEnd(4);
-    const name = formatStageName(s.stage);
-
-    if (skipped) {
-      console.log(chalk.gray(`  ${num}${s.icon} ${name} — ${s.agent} [SKIP]`));
-    } else {
-      console.log(chalk.white(`  ${num}${s.icon} ${name} — ${chalk.bold(s.agent)}`));
-    }
-
-    if (i < stages.length - 1) {
-      console.log(chalk.gray('      │'));
-    }
+  for (const t of templates) {
+    console.log(`  ${chalk.cyan(t.id.padEnd(15))} ${t.desc} ${chalk.gray(`(${t.steps} steps)`)}`);
   }
+
   console.log();
+  console.log(chalk.gray('  Use `cdm start "task" --template <name>` to select a template.'));
+  console.log(chalk.gray('  Without --template, the Planner agent auto-selects based on task.\n'));
 }
 
-function findResumeStage(
-  currentStage: PipelineStage,
-  feature: { stageResults: Map<PipelineStage, any> },
-): PipelineStage | null {
-  const stages = [
-    PipelineStage.REQUIREMENTS_GATHERING,
-    PipelineStage.ARCHITECTURE_DESIGN,
-    PipelineStage.UI_UX_DESIGN,
-    PipelineStage.TASK_BREAKDOWN,
-    PipelineStage.IMPLEMENTATION,
-    PipelineStage.CODE_REVIEW,
-    PipelineStage.TESTING,
-    PipelineStage.SECURITY_REVIEW,
-    PipelineStage.DOCUMENTATION,
-    PipelineStage.DEPLOYMENT,
-  ];
+function findResumeStep(feature: Feature): number | null {
+  if (!feature.executionPlan?.steps) return null;
 
-  const lastResult = feature.stageResults.get(currentStage);
-  if (lastResult && (lastResult.status === 'failed' || lastResult.status === 'revision_needed')) {
-    return currentStage;
-  }
-
-  const idx = stages.indexOf(currentStage);
-  if (idx >= 0 && idx < stages.length - 1) {
-    return stages[idx + 1];
+  for (const step of feature.executionPlan.steps) {
+    const result = feature.stepResults.get(step.index);
+    if (!result || result.status === StepStatus.FAILED) {
+      return step.index;
+    }
   }
 
   return null;
@@ -914,17 +1016,17 @@ function printPipelineResult(result: PipelineResult): void {
     console.log(chalk.bold.green('\n✅ Pipeline Completed Successfully!\n'));
   } else {
     console.log(chalk.bold.red('\n❌ Pipeline Failed\n'));
-    if (result.stagesFailed.length > 0) {
-      console.log(chalk.gray(`  Tip: Run \`cdm resume\` to retry from the failed stage.\n`));
+    if (result.stepsFailed && result.stepsFailed.length > 0) {
+      console.log(chalk.gray(`  Tip: Run \`cdm resume\` to retry from the failed step.\n`));
     }
   }
 
   console.log(chalk.bold('Summary:'));
   console.log(`  Execution mode:   ${chalk.cyan(result.executionMode)}`);
-  console.log(`  Context optimized: ${result.contextOptimized ? chalk.green('yes (role-aware filtering)') : chalk.gray('no (run cdm analyze first)')}`);
-  console.log(`  Stages completed: ${chalk.green(String(result.stagesCompleted.length))}`);
-  console.log(`  Stages failed:    ${chalk.red(String(result.stagesFailed.length))}`);
-  console.log(`  Stages skipped:   ${chalk.yellow(String(result.stagesSkipped.length))}`);
+  console.log(`  Template used:    ${chalk.cyan(result.templateUsed || 'auto-selected')}`);
+  console.log(`  Steps completed:  ${chalk.green(String(result.stepsCompleted?.length ?? 0))}`);
+  console.log(`  Steps failed:     ${chalk.red(String(result.stepsFailed?.length ?? 0))}`);
+  console.log(`  Steps skipped:    ${chalk.yellow(String(result.stepsSkipped?.length ?? 0))}`);
   console.log(`  Artifacts:        ${chalk.cyan(String(result.artifacts.length))}`);
   console.log(`  Issues:           ${chalk.yellow(String(result.issues.length))}`);
   console.log(`  Tokens used:      ${result.totalTokensUsed.toLocaleString()}`);
@@ -937,10 +1039,10 @@ function printPipelineResult(result: PipelineResult): void {
 
   if (result.issues.length > 0) {
     console.log(chalk.bold('\nIssues:'));
-    const bySeverity = result.issues.reduce((acc, issue) => {
+    const bySeverity = result.issues.reduce<Record<string, number>>((acc, issue) => {
       acc[issue.severity] = (acc[issue.severity] ?? 0) + 1;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
     for (const [sev, count] of Object.entries(bySeverity)) {
       const color = sev === 'critical' ? chalk.red : sev === 'high' ? chalk.yellow : chalk.gray;
@@ -948,10 +1050,10 @@ function printPipelineResult(result: PipelineResult): void {
     }
   }
 
-  if (result.stagesFailed.length > 0) {
-    console.log(chalk.bold.red('\nFailed Stages:'));
-    for (const stage of result.stagesFailed) {
-      console.log(`  ${chalk.red('✗')} ${formatStageName(stage)}`);
+  if (result.stepsFailed && result.stepsFailed.length > 0) {
+    console.log(chalk.bold.red('\nFailed Steps:'));
+    for (const step of result.stepsFailed) {
+      console.log(`  ${chalk.red('✗')} Step ${step}`);
     }
   }
 

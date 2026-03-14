@@ -1,4 +1,4 @@
-import { type Artifact, type AgentRole, type PipelineStage, AgentRole as Roles } from '../types';
+import { type Artifact, type AgentRole, AgentRole as Roles } from '../types';
 
 /**
  * Context optimizer — reduces token usage by 60-80% per agent prompt.
@@ -24,24 +24,31 @@ interface ContextSlice {
 //   ## Error Handling | ## Architecture | ## Testing Conventions | ## API Conventions | ## Code Samples
 
 const ROLE_CONTEXT: Record<string, ContextSlice> = {
-  [Roles.PRODUCT_MANAGER]:        { analysisSection: ['Entry Points'],                                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
-  [Roles.BUSINESS_ANALYST]:       { analysisSection: ['Dependencies'],                                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
-  [Roles.ENGINEERING_MANAGER]:    { analysisSection: ['Testing'],                                                          profileSections: ['Architecture', 'Testing Conventions'],                                       needsFullArtifacts: false },
-  [Roles.SOLUTIONS_ARCHITECT]:    { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture', 'API Conventions'],                                           needsFullArtifacts: false },
-  [Roles.SYSTEM_ARCHITECT]:       { analysisSection: ['Dependencies', 'Entry Points', 'Patterns', 'Module Dependencies'],  profileSections: ['Architecture', 'Import Style', 'TypeScript Usage', 'API Conventions'],       needsFullArtifacts: false },
-  [Roles.UI_DESIGNER]:            { analysisSection: [],                                                                   profileSections: ['Naming Conventions'],                                                        needsFullArtifacts: false },
-  [Roles.SENIOR_DEVELOPER]:       { analysisSection: ['Patterns', 'Module Dependencies'],                                  profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
-  [Roles.JUNIOR_DEVELOPER]:       { analysisSection: ['Patterns'],                                                         profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
-  [Roles.DATABASE_ENGINEER]:      { analysisSection: ['Dependencies'],                                                     profileSections: ['Naming Conventions', 'TypeScript Usage'],                                    needsFullArtifacts: true },
-  [Roles.CODE_REVIEWER]:          { analysisSection: ['Patterns'],                                                         profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'], needsFullArtifacts: true },
-  [Roles.QA_ENGINEER]:            { analysisSection: ['Testing'],                                                          profileSections: ['Testing Conventions', 'Naming Conventions'],                                 needsFullArtifacts: false },
-  [Roles.PERFORMANCE_ENGINEER]:   { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture', 'API Conventions'],                                           needsFullArtifacts: false },
-  [Roles.SECURITY_ENGINEER]:      { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['API Conventions', 'Import Style'],                                           needsFullArtifacts: false },
-  [Roles.COMPLIANCE_OFFICER]:     { analysisSection: ['Dependencies'],                                                     profileSections: ['API Conventions'],                                                           needsFullArtifacts: false },
-  [Roles.ACCESSIBILITY_SPECIALIST]:{ analysisSection: [],                                                                  profileSections: ['Naming Conventions'],                                                        needsFullArtifacts: false },
-  [Roles.SRE_ENGINEER]:           { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
-  [Roles.DEVOPS_ENGINEER]:        { analysisSection: ['Dependencies', 'Entry Points'],                                     profileSections: ['Architecture'],                                                              needsFullArtifacts: false },
-  [Roles.DOCUMENTATION_WRITER]:   { analysisSection: ['Entry Points', 'Dependencies', 'Patterns'],                        profileSections: ['Naming Conventions', 'Architecture', 'API Conventions'],                      needsFullArtifacts: false },
+  [Roles.PLANNER]: {
+    analysisSection: ['Entry Points', 'Dependencies'],
+    profileSections: ['Architecture'],
+    needsFullArtifacts: false,
+  },
+  [Roles.ARCHITECT]: {
+    analysisSection: ['Dependencies', 'Entry Points', 'Patterns', 'Module Dependencies'],
+    profileSections: ['Architecture', 'Import Style', 'TypeScript Usage', 'API Conventions'],
+    needsFullArtifacts: false,
+  },
+  [Roles.DEVELOPER]: {
+    analysisSection: ['Patterns', 'Module Dependencies'],
+    profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'],
+    needsFullArtifacts: true,
+  },
+  [Roles.REVIEWER]: {
+    analysisSection: ['Patterns', 'Testing'],
+    profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples', 'Testing Conventions'],
+    needsFullArtifacts: true,
+  },
+  [Roles.OPERATOR]: {
+    analysisSection: ['Dependencies', 'Entry Points'],
+    profileSections: ['Architecture', 'API Conventions'],
+    needsFullArtifacts: false,
+  },
 };
 
 // ─── Artifact summarizer ────────────────────────────────────────────────────
@@ -117,8 +124,6 @@ function extractSections(markdown: string, sectionNames: string[]): string {
       const matches = sectionNames.some(s => {
         const n = name.toLowerCase();
         const t = s.toLowerCase();
-        // Exact match OR heading starts with the term followed by a space
-        // (e.g. 'Testing' matches 'Testing Conventions' but NOT 'Module Dependencies')
         return n === t || n.startsWith(t + ' ');
       });
 

@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   type AgentRole,
+  AgentRole as AR,
   type AgentTask,
   type AgentResult,
-  PipelineStage,
   type Artifact,
   ArtifactType,
   ArtifactStatus,
@@ -23,20 +23,15 @@ import { isRtkInstalled } from '../utils/rtk';
 
 export type ExecutionMode = 'claude-cli' | 'simulation';
 
-// ─── Project snapshot passed from cdm init ───────────────────────────────────
-
 export interface ProjectSnapshot {
-  // Stack
   projectName: string;
   language: string;
   framework: string;
   testFramework: string;
   buildTool: string;
-  // Infrastructure
   ciProvider: string;
   deployTarget: string;
   cloudProvider: string;
-  // Code conventions
   naming: {
     files: string;
     directories: string;
@@ -55,16 +50,14 @@ export interface ProjectSnapshot {
     pathStyle: string;
     nodeProtocol: boolean;
   };
-  // Architecture
   architecturePattern: string;
   architectureLayers: string[];
-  // Project content
   entryPoints: string[];
-  topDirs: string[];          // top-level source directories
-  keyDeps: string[];          // notable external dep names
-  patterns: string[];         // detected design patterns
+  topDirs: string[];
+  keyDeps: string[];
+  patterns: string[];
   testDirs: string[];
-  apiStyle: string;           // REST, GraphQL, tRPC, or 'none'
+  apiStyle: string;
 }
 
 export interface ClaudeCodeOptions {
@@ -118,10 +111,10 @@ export class ClaudeCodeBridge {
   }
 
   async executeAgentTask(task: AgentTask): Promise<AgentResult> {
-    const agent = this.agentRegistry.getAgent(task.assignedTo);
+    const agent = this.agentRegistry.getAgent(task.assignedTo, task.activeSkills);
     const startTime = Date.now();
 
-    agentLog(task.assignedTo, `Preparing task: ${task.title}`, task.stage);
+    agentLog(task.assignedTo, `Preparing task: ${task.title}`, task.step);
 
     const prompt = agent.buildClaudeCodePrompt(task);
     this.writePromptFile(task.assignedTo, task.id, prompt);
@@ -138,6 +131,7 @@ export class ClaudeCodeBridge {
 
       return {
         agentRole: task.assignedTo,
+        skills: task.activeSkills,
         status: 'success',
         output,
         artifacts,
@@ -147,27 +141,29 @@ export class ClaudeCodeBridge {
         metadata: {
           taskId: task.id,
           executionMode: this.resolveExecutionMode(),
+          skills: task.activeSkills,
         },
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      agentLog(task.assignedTo, `Task failed: ${errorMessage}`, task.stage, 'error');
+      agentLog(task.assignedTo, `Task failed: ${errorMessage}`, task.step, 'error');
 
       return {
         agentRole: task.assignedTo,
+        skills: task.activeSkills,
         status: 'failure',
         output: errorMessage,
         artifacts: [],
         issues: [],
         tokensUsed: this.estimateTokens(prompt),
         durationMs: Date.now() - startTime,
-        metadata: { taskId: task.id, error: errorMessage },
+        metadata: { taskId: task.id, error: errorMessage, skills: task.activeSkills },
       };
     }
   }
 
   generateSubagentPrompt(task: AgentTask): string {
-    const agent = this.agentRegistry.getAgent(task.assignedTo);
+    const agent = this.agentRegistry.getAgent(task.assignedTo, task.activeSkills);
     return agent.buildClaudeCodePrompt(task);
   }
 
@@ -195,7 +191,6 @@ export class ClaudeCodeBridge {
     s.push('This project is managed by CDM, a multi-agent development system.');
     s.push('All CDM data lives in the `.cdm/` folder. Read these files before modifying the codebase.\n');
 
-    // ── .cdm structure ─────────────────────────────────────────────────
     s.push('## `.cdm/` Folder Structure\n');
     s.push('```');
     s.push('.cdm/');
@@ -204,16 +199,17 @@ export class ClaudeCodeBridge {
     s.push('│   ├── overview.md           # Stack, dependencies, patterns, entry points');
     s.push('│   ├── structure.md          # Project file tree');
     s.push('│   ├── codestyle.md          # Naming, formatting, imports, code samples');
-    s.push('│   └── <entity>.md           # One file per source directory (agents.md, api.md, ...)');
+    s.push('│   └── <entity>.md           # One file per source directory');
     s.push('├── agents/                   # Agent role definitions and system prompts');
-    s.push('│   ├── product-manager.md');
-    s.push('│   ├── senior-developer.md');
-    s.push('│   └── ... (one per agent)');
+    s.push('│   ├── planner.md');
+    s.push('│   ├── architect.md');
+    s.push('│   ├── developer.md');
+    s.push('│   ├── reviewer.md');
+    s.push('│   └── operator.md');
     s.push('├── features/                 # Feature state files (one JSON per feature)');
-    s.push('└── artifacts/                # Produced artifacts from pipeline stages');
+    s.push('└── artifacts/                # Produced artifacts from pipeline steps');
     s.push('```\n');
 
-    // ── RTK token optimization (only if installed) ─────────────────────────
     if (isRtkInstalled()) {
       s.push('## Token Optimization\n');
       s.push('RTK is configured to compress CLI command outputs (git, ls, grep, test runners).');
@@ -227,55 +223,25 @@ export class ClaudeCodeBridge {
     s.push('3. **`.cdm/analysis/<entity>.md`** — Understand specific modules before modifying them');
     s.push('4. **`.cdm/project.json`** — Project language, framework, build tool, cloud provider, CI/CD\n');
 
-    // ── Team ───────────────────────────────────────────────────────────
-    s.push('## Agent Team\n');
+    s.push('## Agent Team (5 Agents + Skills)\n');
     s.push('```');
-    s.push('Product Manager (top level)');
-    s.push('├── Business Analyst');
-    s.push('├── Engineering Manager');
-    s.push('│   ├── Solutions Architect');
-    s.push('│   ├── System Architect');
-    s.push('│   ├── Senior Developer');
-    s.push('│   │   └── Junior Developer');
-    s.push('│   ├── Database Engineer');
-    s.push('│   ├── Code Reviewer');
-    s.push('│   ├── QA Engineer');
-    s.push('│   ├── Performance Engineer');
-    s.push('│   ├── Security Engineer');
-    s.push('│   ├── Compliance Officer');
-    s.push('│   ├── Accessibility Specialist');
-    s.push('│   ├── SRE Engineer');
-    s.push('│   ├── DevOps Engineer');
-    s.push('│   └── Documentation Writer');
-    s.push('└── UI/UX Designer');
+    s.push('Planner       → requirements-analysis, task-decomposition');
+    s.push('Architect     → system-design, api-design, data-modeling, ui-design');
+    s.push('Developer     → code-implementation, test-writing, documentation');
+    s.push('Reviewer      → code-review, security-audit, performance-analysis, accessibility-audit, test-validation');
+    s.push('Operator      → ci-cd, deployment, monitoring');
     s.push('```\n');
 
-    s.push('Agent definitions are in `.cdm/agents/`. Each file contains the agent\'s role, system prompt, capabilities, and artifact contracts.\n');
+    s.push('Agent definitions are in `.cdm/agents/`. Each file contains the agent\'s role, system prompt, capabilities, and compatible skills.\n');
 
-    // ── Pipeline ───────────────────────────────────────────────────────
-    s.push('## Development Pipeline\n');
-    s.push('Features go through these stages in order:\n');
-    s.push('1. **Requirements Gathering** → Product Manager');
-    s.push('2. **Architecture Design** → System Architect');
-    s.push('3. **UI/UX Design** → UI Designer');
-    s.push('4. **Task Breakdown** → Engineering Manager');
-    s.push('5. **Implementation** → Senior Developer + Junior Developer');
-    s.push('6. **Code Review** → Code Reviewer');
-    s.push('7. **Testing** → QA Engineer');
-    s.push('8. **Security Review** → Security Engineer');
-    s.push('9. **Documentation** → Documentation Writer');
-    s.push('10. **Deployment** → DevOps Engineer\n');
+    s.push('## Pipeline Templates\n');
+    s.push('- **quick-fix**: Developer → Reviewer (for bugs, typos, small fixes)');
+    s.push('- **feature**: Planner → Architect → Developer → Reviewer');
+    s.push('- **full-feature**: feature + Security + Operator');
+    s.push('- **review-only**: Reviewer (multi-skill audit)');
+    s.push('- **design-only**: Planner → Architect');
+    s.push('- **deploy**: Operator\n');
 
-    // ── Delegation ─────────────────────────────────────────────────────
-    s.push('## Agent Delegation Protocol\n');
-    s.push('When delegating work to a subagent:\n');
-    s.push('1. Read the agent\'s definition from `.cdm/agents/<agent-name>.md`');
-    s.push('2. Include the project context from `.cdm/analysis/overview.md`');
-    s.push('3. Include the code style rules from `.cdm/analysis/codestyle.md`');
-    s.push('4. Read `.cdm/analysis/<entity>.md` for the relevant source directories');
-    s.push('5. Provide all relevant input artifacts and clear output expectations\n');
-
-    // ── Artifact format ────────────────────────────────────────────────
     s.push('## Artifact Format\n');
     s.push('```');
     s.push('---ARTIFACT_START---');
@@ -319,7 +285,7 @@ export class ClaudeCodeBridge {
     const claudeBin = this.options.claudePath ?? 'claude';
     const timeoutMs = (this.options.timeout ?? 600) * 1000;
 
-    agentLog(task.assignedTo, `Invoking Claude Code CLI [${task.title}]`, task.stage);
+    agentLog(task.assignedTo, `Invoking Claude Code CLI [${task.title}]`, task.step);
 
     const args = ['--print'];
 
@@ -332,27 +298,18 @@ export class ClaudeCodeBridge {
     }
 
     const agentConfig = this.agentRegistry.getConfig(task.assignedTo);
-    const allowedTools = agentConfig.capabilities.flatMap(c => c.allowedTools);
+    const allowedTools = agentConfig.capabilities.flatMap((c) => c.allowedTools);
     if (allowedTools.length > 0) {
       args.push('--allowedTools', allowedTools.join(','));
     }
 
-    // Prompt is sent via stdin rather than as a CLI arg.
-    // This avoids two issues:
-    //   1. ARG_MAX limits on very long prompts.
-    //   2. claude --print treating an ignored/null stdin as "no input" even
-    //      when a positional argument is present.
-
-    // Build a clean child environment: inherit everything except Claude Code
-    // session markers that would cause the spawned process to be rejected as
-    // a nested session.  The child starts as a fresh Claude CLI instance.
     const childEnv: NodeJS.ProcessEnv = { ...process.env };
     if (this.isNestedClaudeSession()) {
       if (!this.nestedSessionWarned) {
         agentLog(
           task.assignedTo,
           'Detected parent Claude Code session — stripping session markers so agents run as fresh instances',
-          task.stage,
+          task.step,
         );
         this.nestedSessionWarned = true;
       }
@@ -361,29 +318,22 @@ export class ClaudeCodeBridge {
       delete childEnv.CLAUDE_CODE_SSE_PORT;
     }
 
-    // RTK environment: PATH and RTK_* vars are inherited via the spread above.
-    // Do NOT strip RTK_* — the rtk PreToolUse hook needs these to compress CLI
-    // outputs in child Claude Code processes, reducing token consumption by 60-90%.
-
     childEnv.CDM_AGENT_ROLE = task.assignedTo;
-    childEnv.CDM_PIPELINE_STAGE = task.stage;
+    childEnv.CDM_PIPELINE_STEP = task.step;
     childEnv.CDM_FEATURE_ID = task.featureId;
+    if (task.activeSkills && task.activeSkills.length > 0) {
+      childEnv.CDM_ACTIVE_SKILLS = task.activeSkills.join(',');
+    }
 
     return new Promise<string>((resolve, reject) => {
       const proc = spawn(claudeBin, args, {
         cwd: this.options.projectPath,
-        // stdin is a pipe so we can write the prompt then close it.
-        // detached puts the child in its own process group so it is not
-        // affected by signals (SIGTERM/SIGHUP) sent to the parent Claude Code
-        // process group when CDM is invoked from within an active session.
         stdio: ['pipe', 'pipe', 'pipe'],
         detached: true,
         timeout: timeoutMs,
         env: childEnv,
       });
 
-      // Send the prompt via stdin and close the pipe so claude knows input is
-      // complete and can begin processing.
       proc.stdin.write(prompt, 'utf-8');
       proc.stdin.end();
 
@@ -407,7 +357,7 @@ export class ClaudeCodeBridge {
           agentLog(
             task.assignedTo,
             `Claude CLI completed (${stdout.length} chars output)`,
-            task.stage,
+            task.step,
           );
           resolve(stdout);
         } else {
@@ -423,13 +373,12 @@ export class ClaudeCodeBridge {
   }
 
   private async invokeSimulation(task: AgentTask): Promise<string> {
-    agentLog(task.assignedTo, 'Running in simulation mode (Claude CLI not available)', task.stage);
+    agentLog(task.assignedTo, 'Running in simulation mode (Claude CLI not available)', task.step);
 
-    const agent = this.agentRegistry.getAgent(task.assignedTo);
+    const agent = this.agentRegistry.getAgent(task.assignedTo, task.activeSkills);
     const result = await agent.execute(task);
     return result.output;
   }
-
 
   private buildAgentInstructionFile(
     config: import('../types').AgentConfig,
@@ -439,8 +388,7 @@ export class ClaudeCodeBridge {
 
     sections.push(`# ${config.title}\n`);
     sections.push(`**Role:** ${config.role}`);
-    sections.push(`**Reports to:** ${config.reportsTo ?? 'None (top-level)'}`);
-    sections.push(`**Direct reports:** ${config.directReports.join(', ') || 'None'}\n`);
+    sections.push(`**Compatible Skills:** ${config.compatibleSkills?.join(', ') || 'None'}\n`);
     sections.push(`## Description\n${config.description}\n`);
     sections.push(`## System Prompt\n${config.systemPrompt}\n`);
 
@@ -470,16 +418,12 @@ export class ClaudeCodeBridge {
     return sections.join('\n');
   }
 
-  // ── Project context injection ─────────────────────────────────────────────
-
   private buildProjectContextSection(
     role: import('../types').AgentRole,
     s: ProjectSnapshot,
   ): string {
-    const AgentRole = require('../types').AgentRole;
     const lines: string[] = ['## Project Context\n'];
 
-    // ── Stack (all agents) ────────────────────────────────────────────────
     lines.push('### Stack');
     lines.push(`- **Project:** ${s.projectName}`);
     lines.push(`- **Language:** ${s.language}`);
@@ -488,14 +432,7 @@ export class ClaudeCodeBridge {
     if (s.buildTool !== 'unknown') lines.push(`- **Build tool:** ${s.buildTool}`);
     lines.push('');
 
-    // ── Architecture (architect / manager / developer agents) ─────────────
-    const needsArch = [
-      AgentRole.SYSTEM_ARCHITECT, AgentRole.SOLUTIONS_ARCHITECT,
-      AgentRole.ENGINEERING_MANAGER, AgentRole.SENIOR_DEVELOPER,
-      AgentRole.JUNIOR_DEVELOPER, AgentRole.CODE_REVIEWER,
-      AgentRole.DOCUMENTATION_WRITER, AgentRole.PRODUCT_MANAGER,
-      AgentRole.BUSINESS_ANALYST,
-    ].includes(role);
+    const needsArch = [AR.PLANNER, AR.ARCHITECT, AR.DEVELOPER].includes(role);
 
     if (needsArch && s.architecturePattern !== 'Flat / unknown') {
       lines.push('### Architecture');
@@ -515,13 +452,7 @@ export class ClaudeCodeBridge {
       lines.push('');
     }
 
-    // ── Code conventions (code-authoring agents) ──────────────────────────
-    const needsConventions = [
-      AgentRole.SENIOR_DEVELOPER, AgentRole.JUNIOR_DEVELOPER,
-      AgentRole.CODE_REVIEWER, AgentRole.QA_ENGINEER,
-      AgentRole.DATABASE_ENGINEER, AgentRole.SECURITY_ENGINEER,
-      AgentRole.PERFORMANCE_ENGINEER, AgentRole.ACCESSIBILITY_SPECIALIST,
-    ].includes(role);
+    const needsConventions = [AR.DEVELOPER, AR.REVIEWER].includes(role);
 
     if (needsConventions) {
       lines.push('### Code Conventions');
@@ -536,11 +467,7 @@ export class ClaudeCodeBridge {
       lines.push('');
     }
 
-    // ── Testing (QA + developers) ─────────────────────────────────────────
-    const needsTesting = [
-      AgentRole.QA_ENGINEER, AgentRole.SENIOR_DEVELOPER,
-      AgentRole.JUNIOR_DEVELOPER, AgentRole.CODE_REVIEWER,
-    ].includes(role);
+    const needsTesting = [AR.DEVELOPER, AR.REVIEWER].includes(role);
 
     if (needsTesting && s.testDirs.length > 0) {
       lines.push('### Testing');
@@ -549,12 +476,7 @@ export class ClaudeCodeBridge {
       lines.push('');
     }
 
-    // ── API / domain context ──────────────────────────────────────────────
-    const needsApi = [
-      AgentRole.SENIOR_DEVELOPER, AgentRole.SYSTEM_ARCHITECT,
-      AgentRole.SOLUTIONS_ARCHITECT, AgentRole.SECURITY_ENGINEER,
-      AgentRole.CODE_REVIEWER,
-    ].includes(role);
+    const needsApi = [AR.ARCHITECT, AR.DEVELOPER, AR.REVIEWER].includes(role);
 
     if (needsApi && s.apiStyle !== 'none') {
       lines.push('### API');
@@ -562,25 +484,15 @@ export class ClaudeCodeBridge {
       lines.push('');
     }
 
-    // ── External dependencies (relevant agents) ───────────────────────────
-    const needsDeps = [
-      AgentRole.SYSTEM_ARCHITECT, AgentRole.SOLUTIONS_ARCHITECT,
-      AgentRole.SENIOR_DEVELOPER, AgentRole.DATABASE_ENGINEER,
-      AgentRole.SECURITY_ENGINEER, AgentRole.BUSINESS_ANALYST,
-      AgentRole.PERFORMANCE_ENGINEER,
-    ].includes(role);
+    const needsDeps = [AR.PLANNER, AR.ARCHITECT, AR.DEVELOPER].includes(role);
 
     if (needsDeps && s.keyDeps.length > 0) {
       lines.push('### Key Dependencies');
-      lines.push(s.keyDeps.slice(0, 10).map(d => `- ${d}`).join('\n'));
+      lines.push(s.keyDeps.slice(0, 10).map((d) => `- ${d}`).join('\n'));
       lines.push('');
     }
 
-    // ── Infrastructure (devops / sre / compliance agents) ─────────────────
-    const needsInfra = [
-      AgentRole.DEVOPS_ENGINEER, AgentRole.SRE_ENGINEER,
-      AgentRole.COMPLIANCE_OFFICER, AgentRole.SECURITY_ENGINEER,
-    ].includes(role);
+    const needsInfra = [AR.OPERATOR].includes(role);
 
     if (needsInfra) {
       const infra: string[] = [];
@@ -601,8 +513,6 @@ export class ClaudeCodeBridge {
     return lines.join('\n');
   }
 
-  // ── File pattern adjustment by language ───────────────────────────────────
-
   private tailorFilePatterns(genericPatterns: string[], language: string): string[] {
     const langPatterns: Record<string, string[]> = {
       typescript: ['src/**/*.ts', 'src/**/*.tsx', 'lib/**/*.ts', 'tests/**/*.ts'],
@@ -621,10 +531,8 @@ export class ClaudeCodeBridge {
     const replacement = langPatterns[lang];
     if (!replacement) return genericPatterns;
 
-    // Keep any patterns that are already correct for this language;
-    // replace generic TS/JS patterns with language-appropriate ones.
     const generic = new Set(['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.js', 'src/**/*.jsx', 'lib/**/*']);
-    const hasOnlyGeneric = genericPatterns.every(p => generic.has(p));
+    const hasOnlyGeneric = genericPatterns.every((p) => generic.has(p));
     return hasOnlyGeneric ? replacement : genericPatterns;
   }
 
@@ -654,7 +562,12 @@ export class ClaudeCodeBridge {
             updatedAt: new Date(),
             version: 1,
             content: contentMatch[1].trim(),
-            metadata: { taskId: task.id, stage: task.stage, featureId: task.featureId },
+            metadata: {
+              taskId: task.id,
+              step: task.step,
+              featureId: task.featureId,
+              skills: task.activeSkills,
+            },
             status: ArtifactStatus.DRAFT,
             reviewStatus: ReviewStatus.PENDING,
           });
@@ -686,8 +599,9 @@ export class ClaudeCodeBridge {
           title: titleMatch[1].trim(),
           description: descMatch?.[1]?.trim() ?? '',
           reportedBy: task.assignedTo,
-          stage: task.stage,
-          status: 'open' as any,
+          step: task.step,
+          stepIndex: task.stepIndex,
+          status: 'open' as Issue['status'],
           createdAt: new Date(),
         });
       }
@@ -705,6 +619,7 @@ export class ClaudeCodeBridge {
       user_stories: ArtifactType.USER_STORIES,
       user_story: ArtifactType.USER_STORIES,
       acceptance_criteria: ArtifactType.ACCEPTANCE_CRITERIA,
+      execution_plan: ArtifactType.EXECUTION_PLAN,
       architecture_doc: ArtifactType.ARCHITECTURE_DOC,
       architecture_document: ArtifactType.ARCHITECTURE_DOC,
       architecture: ArtifactType.ARCHITECTURE_DOC,
@@ -712,62 +627,30 @@ export class ClaudeCodeBridge {
       api_spec: ArtifactType.API_SPEC,
       api_specification: ArtifactType.API_SPEC,
       data_model: ArtifactType.DATA_MODEL,
+      database_schema: ArtifactType.DATABASE_SCHEMA,
+      schema: ArtifactType.DATABASE_SCHEMA,
       ui_spec: ArtifactType.UI_SPEC,
       wireframe: ArtifactType.WIREFRAME,
       component_spec: ArtifactType.COMPONENT_SPEC,
-      task_list: ArtifactType.TASK_LIST,
-      sprint_plan: ArtifactType.SPRINT_PLAN,
       source_code: ArtifactType.SOURCE_CODE,
       code: ArtifactType.SOURCE_CODE,
       unit_tests: ArtifactType.UNIT_TESTS,
       integration_tests: ArtifactType.INTEGRATION_TESTS,
       e2e_tests: ArtifactType.E2E_TESTS,
-      test_plan: ArtifactType.TEST_PLAN,
       test_report: ArtifactType.TEST_REPORT,
       code_review_report: ArtifactType.CODE_REVIEW_REPORT,
       code_review: ArtifactType.CODE_REVIEW_REPORT,
       security_report: ArtifactType.SECURITY_REPORT,
+      performance_report: ArtifactType.PERFORMANCE_REPORT,
+      accessibility_report: ArtifactType.ACCESSIBILITY_REPORT,
       deployment_plan: ArtifactType.DEPLOYMENT_PLAN,
       infrastructure_config: ArtifactType.INFRASTRUCTURE_CONFIG,
       ci_cd_config: ArtifactType.CI_CD_CONFIG,
       api_documentation: ArtifactType.API_DOCUMENTATION,
-      user_documentation: ArtifactType.USER_DOCUMENTATION,
       developer_documentation: ArtifactType.DEVELOPER_DOCUMENTATION,
-      changelog: ArtifactType.CHANGELOG,
       monitoring_config: ArtifactType.MONITORING_CONFIG,
       monitoring: ArtifactType.MONITORING_CONFIG,
-      alerting_rules: ArtifactType.ALERTING_RULES,
-      alerting: ArtifactType.ALERTING_RULES,
-      scaling_policy: ArtifactType.SCALING_POLICY,
-      scaling: ArtifactType.SCALING_POLICY,
-      cost_analysis: ArtifactType.COST_ANALYSIS,
-      cost: ArtifactType.COST_ANALYSIS,
-      sla_definition: ArtifactType.SLA_DEFINITION,
-      sla: ArtifactType.SLA_DEFINITION,
-      disaster_recovery_plan: ArtifactType.DISASTER_RECOVERY_PLAN,
-      disaster_recovery: ArtifactType.DISASTER_RECOVERY_PLAN,
-      performance_benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
-      benchmark: ArtifactType.PERFORMANCE_BENCHMARK,
       runbook: ArtifactType.RUNBOOK,
-      technology_decision_record: ArtifactType.TECHNOLOGY_DECISION_RECORD,
-      tdr: ArtifactType.TECHNOLOGY_DECISION_RECORD,
-      integration_plan: ArtifactType.INTEGRATION_PLAN,
-      migration_strategy: ArtifactType.MIGRATION_STRATEGY,
-      database_schema: ArtifactType.DATABASE_SCHEMA,
-      schema: ArtifactType.DATABASE_SCHEMA,
-      migration_script: ArtifactType.MIGRATION_SCRIPT,
-      query_optimization_report: ArtifactType.QUERY_OPTIMIZATION_REPORT,
-      load_test_plan: ArtifactType.LOAD_TEST_PLAN,
-      performance_report: ArtifactType.PERFORMANCE_REPORT,
-      compliance_report: ArtifactType.COMPLIANCE_REPORT,
-      privacy_impact_assessment: ArtifactType.PRIVACY_IMPACT_ASSESSMENT,
-      accessibility_report: ArtifactType.ACCESSIBILITY_REPORT,
-      accessibility_test_suite: ArtifactType.ACCESSIBILITY_TEST_SUITE,
-      business_case: ArtifactType.BUSINESS_CASE,
-      roi_analysis: ArtifactType.ROI_ANALYSIS,
-      incident_response_plan: ArtifactType.INCIDENT_RESPONSE_PLAN,
-      capacity_plan: ArtifactType.CAPACITY_PLAN,
-      chaos_test_plan: ArtifactType.CHAOS_TEST_PLAN,
     };
     return mapping[normalized] ?? null;
   }
@@ -821,5 +704,4 @@ export class ClaudeCodeBridge {
   private estimateTokens(text: string): number {
     return Math.ceil(text.length / 4);
   }
-
 }

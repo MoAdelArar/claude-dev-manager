@@ -2,7 +2,6 @@ import {
   type AgentRole,
   type HandoffPayload,
   type Artifact,
-  type PipelineStage,
   MessageType,
   MessagePriority,
 } from '../types';
@@ -40,15 +39,15 @@ export class HandoffProtocol {
 
     agentLog(
       payload.fromAgent,
-      `Handing off to ${payload.toAgent} at stage ${payload.stage}`,
-      payload.stage,
+      `Handing off to ${payload.toAgent} at step ${payload.step}`,
+      payload.step,
     );
 
     this.messageBus.send(
       payload.fromAgent,
       payload.toAgent,
       MessageType.ARTIFACT_HANDOFF,
-      `Handoff: ${payload.stage}`,
+      `Handoff: ${payload.step}`,
       this.formatHandoffMessage(payload),
       MessagePriority.HIGH,
       payload.artifacts.map((a) => a.id),
@@ -65,7 +64,7 @@ export class HandoffProtocol {
     agentLog(
       payload.toAgent,
       `Received handoff from ${payload.fromAgent}`,
-      payload.stage,
+      payload.step,
     );
 
     return result;
@@ -74,7 +73,7 @@ export class HandoffProtocol {
   async requestReview(
     fromAgent: AgentRole,
     reviewer: AgentRole,
-    stage: PipelineStage,
+    step: string,
     artifacts: Artifact[],
     reviewInstructions: string,
   ): Promise<void> {
@@ -82,19 +81,19 @@ export class HandoffProtocol {
       fromAgent,
       reviewer,
       MessageType.REVIEW_REQUEST,
-      `Review request for ${stage}`,
+      `Review request for ${step}`,
       reviewInstructions,
       MessagePriority.HIGH,
       artifacts.map((a) => a.id),
     );
 
-    agentLog(fromAgent, `Requested review from ${reviewer}`, stage);
+    agentLog(fromAgent, `Requested review from ${reviewer}`, step);
   }
 
   async submitReviewResponse(
     reviewer: AgentRole,
     originalRequester: AgentRole,
-    stage: PipelineStage,
+    step: string,
     approved: boolean,
     feedback: string,
   ): Promise<void> {
@@ -102,49 +101,49 @@ export class HandoffProtocol {
       reviewer,
       originalRequester,
       approved ? MessageType.APPROVAL : MessageType.REJECTION,
-      `Review ${approved ? 'approved' : 'rejected'}: ${stage}`,
+      `Review ${approved ? 'approved' : 'rejected'}: ${step}`,
       feedback,
       MessagePriority.HIGH,
     );
 
     agentLog(
       reviewer,
-      `${approved ? 'Approved' : 'Rejected'} work at stage ${stage}`,
-      stage,
+      `${approved ? 'Approved' : 'Rejected'} work at step ${step}`,
+      step,
     );
   }
 
   async escalate(
     fromAgent: AgentRole,
     toAgent: AgentRole,
-    stage: PipelineStage,
+    step: string,
     reason: string,
   ): Promise<void> {
     this.messageBus.send(
       fromAgent,
       toAgent,
       MessageType.ESCALATION,
-      `Escalation at ${stage}`,
+      `Escalation at ${step}`,
       reason,
       MessagePriority.CRITICAL,
     );
 
-    agentLog(fromAgent, `Escalated to ${toAgent}: ${reason}`, stage, 'warn');
+    agentLog(fromAgent, `Escalated to ${toAgent}: ${reason}`, step, 'warn');
   }
 
   getHandoffHistory(): HandoffResult[] {
     return [...this.handoffHistory];
   }
 
-  getHandoffsForStage(stage: PipelineStage): HandoffResult[] {
-    return this.handoffHistory.filter((h) => h.payload.stage === stage);
+  getHandoffsForStep(step: string): HandoffResult[] {
+    return this.handoffHistory.filter((h) => h.payload.step === step);
   }
 
   private formatHandoffMessage(payload: HandoffPayload): string {
     const sections: string[] = [];
 
     sections.push(`## Handoff: ${payload.fromAgent} → ${payload.toAgent}`);
-    sections.push(`**Stage:** ${payload.stage}`);
+    sections.push(`**Step:** ${payload.step}`);
     sections.push(`\n### Context\n${payload.context}`);
     sections.push(`\n### Instructions\n${payload.instructions}`);
 

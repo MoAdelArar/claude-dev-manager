@@ -7,9 +7,83 @@ import {
   type ArtifactStatus,
   type ReviewStatus,
   type AgentRole,
-  PipelineStage,
 } from '../types';
 import logger from '../utils/logger';
+
+const SKILL_ARTIFACT_MAP: Record<string, ArtifactType[]> = {
+  // Planning skills
+  'requirements-analysis': [
+    ArtifactType.REQUIREMENTS_DOC,
+    ArtifactType.USER_STORIES,
+    ArtifactType.ACCEPTANCE_CRITERIA,
+  ],
+  'task-decomposition': [
+    ArtifactType.TASK_LIST,
+    ArtifactType.EXECUTION_PLAN,
+  ],
+  // Design skills
+  'system-design': [
+    ArtifactType.ARCHITECTURE_DOC,
+    ArtifactType.SYSTEM_DIAGRAM,
+  ],
+  'api-design': [
+    ArtifactType.API_SPEC,
+    ArtifactType.API_DOCUMENTATION,
+  ],
+  'data-modeling': [
+    ArtifactType.DATABASE_SCHEMA,
+    ArtifactType.DATA_MODEL,
+  ],
+  'ui-design': [
+    ArtifactType.UI_SPEC,
+    ArtifactType.WIREFRAME,
+    ArtifactType.COMPONENT_SPEC,
+  ],
+  // Build skills
+  'code-implementation': [
+    ArtifactType.SOURCE_CODE,
+  ],
+  'test-writing': [
+    ArtifactType.UNIT_TESTS,
+    ArtifactType.INTEGRATION_TESTS,
+    ArtifactType.E2E_TESTS,
+    ArtifactType.TEST_REPORT,
+  ],
+  'documentation': [
+    ArtifactType.API_DOCUMENTATION,
+    ArtifactType.USER_DOCUMENTATION,
+    ArtifactType.DEVELOPER_DOCUMENTATION,
+    ArtifactType.CHANGELOG,
+  ],
+  // Review skills
+  'code-review': [
+    ArtifactType.CODE_REVIEW_REPORT,
+  ],
+  'security-audit': [
+    ArtifactType.SECURITY_REPORT,
+  ],
+  'performance-analysis': [
+    ArtifactType.PERFORMANCE_REPORT,
+  ],
+  'accessibility-audit': [
+    ArtifactType.ACCESSIBILITY_REPORT,
+  ],
+  'test-validation': [
+    ArtifactType.TEST_REPORT,
+  ],
+  // Operations skills
+  'ci-cd': [
+    ArtifactType.CI_CD_CONFIG,
+  ],
+  'deployment': [
+    ArtifactType.DEPLOYMENT_PLAN,
+    ArtifactType.INFRASTRUCTURE_CONFIG,
+    ArtifactType.RUNBOOK,
+  ],
+  'monitoring': [
+    ArtifactType.MONITORING_CONFIG,
+  ],
+};
 
 export class ArtifactStore {
   private artifacts: Map<string, Artifact> = new Map();
@@ -78,83 +152,20 @@ export class ArtifactStore {
     return Array.from(this.artifacts.values());
   }
 
-  getForStage(stage: PipelineStage): Artifact[] {
-    const stageArtifactMap: Record<PipelineStage, ArtifactType[]> = {
-      [PipelineStage.REQUIREMENTS_GATHERING]: [
-        ArtifactType.REQUIREMENTS_DOC,
-        ArtifactType.USER_STORIES,
-        ArtifactType.ACCEPTANCE_CRITERIA,
-        ArtifactType.BUSINESS_CASE,
-        ArtifactType.ROI_ANALYSIS,
-      ],
-      [PipelineStage.ARCHITECTURE_DESIGN]: [
-        ArtifactType.ARCHITECTURE_DOC,
-        ArtifactType.SYSTEM_DIAGRAM,
-        ArtifactType.API_SPEC,
-        ArtifactType.DATA_MODEL,
-        ArtifactType.TECHNOLOGY_DECISION_RECORD,
-        ArtifactType.INTEGRATION_PLAN,
-        ArtifactType.MIGRATION_STRATEGY,
-        ArtifactType.DATABASE_SCHEMA,
-      ],
-      [PipelineStage.UI_UX_DESIGN]: [
-        ArtifactType.UI_SPEC,
-        ArtifactType.WIREFRAME,
-        ArtifactType.COMPONENT_SPEC,
-      ],
-      [PipelineStage.TASK_BREAKDOWN]: [
-        ArtifactType.TASK_LIST,
-        ArtifactType.SPRINT_PLAN,
-      ],
-      [PipelineStage.IMPLEMENTATION]: [
-        ArtifactType.SOURCE_CODE,
-        ArtifactType.MIGRATION_SCRIPT,
-      ],
-      [PipelineStage.CODE_REVIEW]: [
-        ArtifactType.CODE_REVIEW_REPORT,
-      ],
-      [PipelineStage.TESTING]: [
-        ArtifactType.TEST_PLAN,
-        ArtifactType.UNIT_TESTS,
-        ArtifactType.INTEGRATION_TESTS,
-        ArtifactType.E2E_TESTS,
-        ArtifactType.TEST_REPORT,
-        ArtifactType.LOAD_TEST_PLAN,
-        ArtifactType.PERFORMANCE_REPORT,
-        ArtifactType.ACCESSIBILITY_REPORT,
-        ArtifactType.ACCESSIBILITY_TEST_SUITE,
-      ],
-      [PipelineStage.SECURITY_REVIEW]: [
-        ArtifactType.SECURITY_REPORT,
-        ArtifactType.COMPLIANCE_REPORT,
-        ArtifactType.PRIVACY_IMPACT_ASSESSMENT,
-      ],
-      [PipelineStage.DOCUMENTATION]: [
-        ArtifactType.API_DOCUMENTATION,
-        ArtifactType.USER_DOCUMENTATION,
-        ArtifactType.DEVELOPER_DOCUMENTATION,
-        ArtifactType.CHANGELOG,
-      ],
-      [PipelineStage.DEPLOYMENT]: [
-        ArtifactType.DEPLOYMENT_PLAN,
-        ArtifactType.INFRASTRUCTURE_CONFIG,
-        ArtifactType.CI_CD_CONFIG,
-        ArtifactType.MONITORING_CONFIG,
-        ArtifactType.ALERTING_RULES,
-        ArtifactType.SCALING_POLICY,
-        ArtifactType.COST_ANALYSIS,
-        ArtifactType.SLA_DEFINITION,
-        ArtifactType.DISASTER_RECOVERY_PLAN,
-        ArtifactType.PERFORMANCE_BENCHMARK,
-        ArtifactType.RUNBOOK,
-        ArtifactType.INCIDENT_RESPONSE_PLAN,
-        ArtifactType.CAPACITY_PLAN,
-        ArtifactType.CHAOS_TEST_PLAN,
-      ],
-      [PipelineStage.COMPLETED]: [],
-    };
+  getForSkills(skillIds: string[]): Artifact[] {
+    const types = new Set<ArtifactType>();
+    for (const skillId of skillIds) {
+      const skillTypes = SKILL_ARTIFACT_MAP[skillId];
+      if (skillTypes) {
+        for (const type of skillTypes) {
+          types.add(type);
+        }
+      }
+    }
+    return Array.from(types).flatMap((type) => this.getByType(type));
+  }
 
-    const types = stageArtifactMap[stage] ?? [];
+  getForTypes(types: ArtifactType[]): Artifact[] {
     return types.flatMap((type) => this.getByType(type));
   }
 

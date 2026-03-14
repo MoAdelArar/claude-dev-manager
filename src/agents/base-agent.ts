@@ -10,9 +10,8 @@ import {
   ArtifactStatus,
   ReviewStatus,
   type Issue,
-  type PipelineStage,
   type HandoffPayload,
-  MessagePriority,
+  type Skill,
 } from '../types';
 import { agentLog } from '../utils/logger';
 import { validateArtifact } from '../utils/validators';
@@ -20,11 +19,23 @@ import { type ArtifactStore } from '../workspace/artifact-store';
 import { optimizeInputArtifacts, estimateTokens } from '../context/context-optimizer';
 import { isRtkInstalled } from '../utils/rtk';
 
+export interface ProjectContext {
+  language: string;
+  framework: string;
+  testFramework: string;
+  buildTool: string;
+  cloudProvider: string;
+  projectName?: string;
+  customInstructions?: string;
+}
+
 export abstract class BaseAgent {
   protected config: AgentConfig;
   protected status: AgentStatus = AgentStatus.IDLE;
   protected currentTask: AgentTask | null = null;
   protected artifactStore: ArtifactStore;
+  protected activeSkills: Skill[] = [];
+  protected projectContext: ProjectContext | null = null;
 
   constructor(config: AgentConfig, artifactStore: ArtifactStore) {
     this.config = config;
@@ -51,8 +62,27 @@ export abstract class BaseAgent {
     return this.config.systemPrompt;
   }
 
+  getActiveSkills(): Skill[] {
+    return this.activeSkills;
+  }
+
+  getActiveSkillIds(): string[] {
+    return this.activeSkills.map((s) => s.id);
+  }
+
+  setActiveSkills(skills: Skill[]): void {
+    this.activeSkills = skills;
+    agentLog(this.role, `Active skills: ${skills.map((s) => s.id).join(', ') || 'none'}`);
+  }
+
+  setProjectContext(context: ProjectContext): void {
+    this.projectContext = context;
+  }
+
   getCapabilities(): string[] {
-    return this.config.capabilities.map((c) => c.name);
+    const baseCapabilities = this.config.capabilities.map((c) => c.name);
+    const skillCapabilities = this.activeSkills.map((s) => s.name);
+    return [...new Set([...baseCapabilities, ...skillCapabilities])];
   }
 
   getAllowedTools(): string[] {
@@ -63,11 +93,20 @@ export abstract class BaseAgent {
     return this.config.maxTokenBudget;
   }
 
+  getExpectedOutputArtifacts(): ArtifactType[] {
+    const baseOutputs = this.config.outputArtifacts;
+    const skillOutputs = this.activeSkills.flatMap((s) => s.expectedArtifacts);
+    return [...new Set([...baseOutputs, ...skillOutputs])];
+  }
+
   async execute(task: AgentTask): Promise<AgentResult> {
     this.currentTask = task;
     this.status = AgentStatus.WORKING;
 
-    agentLog(this.role, `Starting task: ${task.title}`, task.stage);
+    agentLog(this.role, `Starting task: ${task.title}`, task.step);
+    if (this.activeSkills.length > 0) {
+      agentLog(this.role, `Using skills: ${this.activeSkills.map((s) => s.id).join(', ')}`, task.step);
+    }
 
     const startTime = Date.now();
     let result: AgentResult;
@@ -81,29 +120,31 @@ export abstract class BaseAgent {
 
       result = {
         agentRole: this.role,
+        skills: this.getActiveSkillIds(),
         status: 'success',
         output,
         artifacts,
         issues,
         tokensUsed: this.estimateTokensUsed(output),
         durationMs: Date.now() - startTime,
-        metadata: { taskId: task.id },
+        metadata: { taskId: task.id, skills: this.getActiveSkillIds() },
       };
 
-      agentLog(this.role, `Task completed: ${task.title}`, task.stage);
+      agentLog(this.role, `Task completed: ${task.title}`, task.step);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      agentLog(this.role, `Task failed: ${errorMessage}`, task.stage, 'error');
+      agentLog(this.role, `Task failed: ${errorMessage}`, task.step, 'error');
 
       result = {
         agentRole: this.role,
+        skills: this.getActiveSkillIds(),
         status: 'failure',
         output: errorMessage,
         artifacts: [],
         issues: [],
         tokensUsed: 0,
         durationMs: Date.now() - startTime,
-        metadata: { taskId: task.id, error: errorMessage },
+        metadata: { taskId: task.id, error: errorMessage, skills: this.getActiveSkillIds() },
       };
     }
 
@@ -125,6 +166,10 @@ export abstract class BaseAgent {
     sections.push(`## Role Description\n${this.config.description}`);
     sections.push(`## System Instructions\n${this.config.systemPrompt}`);
 
+    if (this.activeSkills.length > 0) {
+      sections.push(`## Active Skills\n${this.buildSkillPromptSections()}`);
+    }
+
     sections.push(`## Task\n**${task.title}**\n${task.description}`);
 
     if (task.instructions) {
@@ -136,8 +181,9 @@ export abstract class BaseAgent {
       sections.push(`## Input Artifacts (${task.inputArtifacts.length})\n${optimized}`);
     }
 
-    if (task.expectedOutputs.length > 0) {
-      const outputs = task.expectedOutputs.map((t) => `- ${t}`).join('\n');
+    const expectedOutputs = this.getExpectedOutputArtifacts();
+    if (expectedOutputs.length > 0) {
+      const outputs = expectedOutputs.map((t) => `- ${t}`).join('\n');
       sections.push(`## Expected Outputs\n${outputs}`);
     }
 
@@ -150,9 +196,40 @@ export abstract class BaseAgent {
 
     const prompt = sections.join('\n\n');
     const tokens = estimateTokens(prompt);
-    agentLog(this.role, `Prompt: ~${tokens.toLocaleString()} tokens`, task.stage);
+    agentLog(this.role, `Prompt: ~${tokens.toLocaleString()} tokens`, task.step);
 
     return prompt;
+  }
+
+  protected buildSkillPromptSections(): string {
+    if (this.activeSkills.length === 0) {
+      return '';
+    }
+
+    const sections: string[] = [];
+
+    for (const skill of this.activeSkills) {
+      let template = skill.promptTemplate;
+
+      if (this.projectContext) {
+        template = this.interpolateSkillTemplate(template, this.projectContext);
+      }
+
+      sections.push(`### ${skill.name}\n${template}`);
+    }
+
+    return sections.join('\n\n');
+  }
+
+  protected interpolateSkillTemplate(template: string, context: ProjectContext): string {
+    return template
+      .replace(/\{language\}/g, context.language || 'unknown')
+      .replace(/\{framework\}/g, context.framework || 'none')
+      .replace(/\{testFramework\}/g, context.testFramework || 'unknown')
+      .replace(/\{buildTool\}/g, context.buildTool || 'unknown')
+      .replace(/\{cloudProvider\}/g, context.cloudProvider || 'none')
+      .replace(/\{projectName\}/g, context.projectName || 'project')
+      .replace(/\{customInstructions\}/g, context.customInstructions || '');
   }
 
   protected getOutputFormatInstructions(): string {
@@ -180,22 +257,22 @@ Title: <short title>
 Description: <description>
 ---ISSUE_END---
 
-End with a Recommendations section for the next stage.`;
+End with a Recommendations section for the next step.`;
   }
 
   prepareHandoff(
     toAgent: AgentRole,
-    stage: PipelineStage,
+    step: string,
     artifacts: Artifact[],
     feedback?: string[],
   ): HandoffPayload {
     return {
       fromAgent: this.role,
       toAgent,
-      stage,
+      step,
       context: this.buildHandoffContext(),
       artifacts,
-      instructions: this.buildHandoffInstructions(toAgent, stage),
+      instructions: this.buildHandoffInstructions(toAgent, step),
       constraints: this.getHandoffConstraints(toAgent),
       previousFeedback: feedback,
     };
@@ -203,11 +280,14 @@ End with a Recommendations section for the next stage.`;
 
   protected buildHandoffContext(): string {
     if (!this.currentTask) return 'No active task context.';
-    return `Agent ${this.config.title} completed work on task: ${this.currentTask.title}`;
+    const skills = this.activeSkills.length > 0
+      ? ` (skills: ${this.activeSkills.map((s) => s.id).join(', ')})`
+      : '';
+    return `Agent ${this.config.title}${skills} completed work on task: ${this.currentTask.title}`;
   }
 
-  protected buildHandoffInstructions(toAgent: AgentRole, stage: PipelineStage): string {
-    return `Continuing pipeline at stage ${stage}. Please review provided artifacts and proceed with your responsibilities.`;
+  protected buildHandoffInstructions(toAgent: AgentRole, step: string): string {
+    return `Continuing pipeline at step ${step}. Please review provided artifacts and proceed with your responsibilities.`;
   }
 
   protected getHandoffConstraints(toAgent: AgentRole): string[] {
@@ -237,7 +317,10 @@ End with a Recommendations section for the next stage.`;
       updatedAt: new Date(),
       version: 1,
       content,
-      metadata,
+      metadata: {
+        ...metadata,
+        skills: this.getActiveSkillIds(),
+      },
       status: ArtifactStatus.DRAFT,
       reviewStatus: ReviewStatus.PENDING,
     };
@@ -256,7 +339,7 @@ End with a Recommendations section for the next stage.`;
     severity: Issue['severity'],
     title: string,
     description: string,
-    stage: PipelineStage,
+    step: string,
   ): Issue {
     return {
       id: uuidv4(),
@@ -266,7 +349,7 @@ End with a Recommendations section for the next stage.`;
       title,
       description,
       reportedBy: this.role,
-      stage,
+      step,
       status: 'open' as Issue['status'],
       createdAt: new Date(),
     };

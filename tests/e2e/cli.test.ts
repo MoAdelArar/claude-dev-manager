@@ -80,43 +80,29 @@ describe('CDM CLI — End-to-End', () => {
   // ── cdm agents ──────────────────────────────────────────────────────────
 
   describe('cdm agents', () => {
-    it('should list all 11 agents with descriptions', () => {
+    it('should list all 5 agents with descriptions', () => {
       const out = cdm('agents', projectDir);
       expect(out).toContain('Agent Team');
-      expect(out).toContain('Product Manager');
-      expect(out).toContain('Engineering Manager');
-      expect(out).toContain('System Architect');
-      expect(out).toContain('UI/UX Designer');
-      expect(out).toContain('Senior Developer');
-      expect(out).toContain('Junior Developer');
-      expect(out).toContain('Code Reviewer');
-      expect(out).toContain('QA Engineer');
-      expect(out).toContain('Security Engineer');
-      expect(out).toContain('DevOps Engineer');
-      expect(out).toContain('Documentation Writer');
+      expect(out).toContain('Planner');
+      expect(out).toContain('Architect');
+      expect(out).toContain('Developer');
+      expect(out).toContain('Reviewer');
+      expect(out).toContain('Operator');
     });
   });
 
   // ── cdm pipeline ────────────────────────────────────────────────────────
 
   describe('cdm pipeline', () => {
-    it('should display all 10 pipeline stages in order', () => {
+    it('should display pipeline templates', () => {
       const out = cdm('pipeline', projectDir);
-      expect(out).toContain('Development Pipeline');
-      expect(out).toContain('Requirements Gathering');
-      expect(out).toContain('Architecture Design');
-      expect(out).toContain('Implementation');
-      expect(out).toContain('Code Review');
-      expect(out).toContain('Testing');
-      expect(out).toContain('Deployment');
-
-      const reqIdx = out.indexOf('Requirements Gathering');
-      const archIdx = out.indexOf('Architecture Design');
-      const implIdx = out.indexOf('Implementation');
-      const deployIdx = out.indexOf('Deployment');
-      expect(reqIdx).toBeLessThan(archIdx);
-      expect(archIdx).toBeLessThan(implIdx);
-      expect(implIdx).toBeLessThan(deployIdx);
+      expect(out).toContain('Pipeline Templates');
+      expect(out).toContain('quick-fix');
+      expect(out).toContain('feature');
+      expect(out).toContain('full-feature');
+      expect(out).toContain('review-only');
+      expect(out).toContain('design-only');
+      expect(out).toContain('deploy');
     });
   });
 
@@ -147,10 +133,12 @@ describe('CDM CLI — End-to-End', () => {
       cdm(`init --project "${projectDir}"`, projectDir);
       const agentsDir = path.join(projectDir, '.cdm', 'agents');
       const files = fs.readdirSync(agentsDir);
-      expect(files.length).toBeGreaterThanOrEqual(11);
-      expect(files.some(f => f.includes('product-manager'))).toBe(true);
-      expect(files.some(f => f.includes('senior-developer'))).toBe(true);
-      expect(files.some(f => f.includes('qa-engineer'))).toBe(true);
+      expect(files.length).toBeGreaterThanOrEqual(5);
+      expect(files.some(f => f.includes('planner'))).toBe(true);
+      expect(files.some(f => f.includes('architect'))).toBe(true);
+      expect(files.some(f => f.includes('developer'))).toBe(true);
+      expect(files.some(f => f.includes('reviewer'))).toBe(true);
+      expect(files.some(f => f.includes('operator'))).toBe(true);
     });
 
     it('should generate a valid cdm.config.yaml', () => {
@@ -166,7 +154,7 @@ describe('CDM CLI — End-to-End', () => {
       cdm(`init --project "${projectDir}"`, projectDir);
       const claudeMd = fs.readFileSync(path.join(projectDir, 'CLAUDE.md'), 'utf-8');
       expect(claudeMd).toContain('Agent Team');
-      expect(claudeMd).toContain('Development Pipeline');
+      expect(claudeMd).toContain('Pipeline Templates');
       expect(claudeMd).toContain('Artifact Format');
       expect(claudeMd).toContain('ARTIFACT_START');
     });
@@ -208,18 +196,17 @@ describe('CDM CLI — End-to-End', () => {
     it('should display pipeline plan without executing', () => {
       const out = cdm(`start "Add user authentication" --dry-run --project "${projectDir}"`, projectDir);
       expect(out).toContain('DRY RUN');
-      expect(out).toContain('Requirements Gathering');
-      expect(out).toContain('Product Manager');
-      expect(out).toContain('Deployment');
+      expect(out).toContain('Step');
+      expect(out).toContain('Execution Plan');
     });
 
-    it('should show skipped stages in dry run', () => {
+    it('should accept skip-steps option in dry run', () => {
       const out = cdm(
-        `start "Add feature" --dry-run --skip ui_ux_design,security_review --project "${projectDir}"`,
+        `start "Add feature" --dry-run --skip-steps 0,1 --project "${projectDir}"`,
         projectDir,
       );
       expect(out).toContain('DRY RUN');
-      expect(out).toContain('SKIP');
+      expect(out).toContain('Pipeline Completed Successfully');
     });
   });
 
@@ -309,7 +296,7 @@ describe('CDM CLI — End-to-End', () => {
       expect(out).toContain('Feature Status');
       expect(out).toContain('Dashboard feature');
       expect(out).toMatch(/Status:\s+\w+/);
-      expect(out).toMatch(/Stage:/);
+      expect(out).toMatch(/Step:/);
       expect(out).toMatch(/Artifacts:\s+\d+/);
     }, 120_000);
   });

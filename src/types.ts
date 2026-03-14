@@ -1,29 +1,18 @@
 /**
  * Core type definitions for the Claude Dev Manager multi-agent system.
  * These types define the contracts between all components.
+ *
+ * v2.0: Redesigned from 18 agents to 5 agents + 17 skills + adaptive pipeline.
  */
 
-// ─── Agent Roles ─────────────────────────────────────────────────────────────
+// ─── Agent Roles (5 broad agents) ─────────────────────────────────────────────
 
 export enum AgentRole {
-  PRODUCT_MANAGER = 'product_manager',
-  BUSINESS_ANALYST = 'business_analyst',
-  ENGINEERING_MANAGER = 'engineering_manager',
-  SOLUTIONS_ARCHITECT = 'solutions_architect',
-  SYSTEM_ARCHITECT = 'system_architect',
-  UI_DESIGNER = 'ui_designer',
-  SENIOR_DEVELOPER = 'senior_developer',
-  JUNIOR_DEVELOPER = 'junior_developer',
-  DATABASE_ENGINEER = 'database_engineer',
-  CODE_REVIEWER = 'code_reviewer',
-  QA_ENGINEER = 'qa_engineer',
-  PERFORMANCE_ENGINEER = 'performance_engineer',
-  SECURITY_ENGINEER = 'security_engineer',
-  COMPLIANCE_OFFICER = 'compliance_officer',
-  ACCESSIBILITY_SPECIALIST = 'accessibility_specialist',
-  SRE_ENGINEER = 'sre_engineer',
-  DEVOPS_ENGINEER = 'devops_engineer',
-  DOCUMENTATION_WRITER = 'documentation_writer',
+  PLANNER = 'planner',
+  ARCHITECT = 'architect',
+  DEVELOPER = 'developer',
+  REVIEWER = 'reviewer',
+  OPERATOR = 'operator',
 }
 
 export enum AgentStatus {
@@ -52,88 +41,84 @@ export interface AgentConfig {
   maxTokenBudget: number;
   allowedFilePatterns: string[];
   blockedFilePatterns: string[];
-  reportsTo: AgentRole | null;
-  directReports: AgentRole[];
+  compatibleSkills: string[];
   requiredInputArtifacts: ArtifactType[];
   outputArtifacts: ArtifactType[];
 }
 
-// ─── Pipeline Stages ─────────────────────────────────────────────────────────
+// ─── Skills (composable prompt modules) ───────────────────────────────────────
 
-export enum PipelineStage {
-  REQUIREMENTS_GATHERING = 'requirements_gathering',
-  ARCHITECTURE_DESIGN = 'architecture_design',
-  UI_UX_DESIGN = 'ui_ux_design',
-  TASK_BREAKDOWN = 'task_breakdown',
-  IMPLEMENTATION = 'implementation',
-  CODE_REVIEW = 'code_review',
-  TESTING = 'testing',
-  SECURITY_REVIEW = 'security_review',
-  DOCUMENTATION = 'documentation',
-  DEPLOYMENT = 'deployment',
-  COMPLETED = 'completed',
+export type SkillCategory = 'planning' | 'design' | 'build' | 'review' | 'operations';
+
+export interface SkillProjectFilter {
+  languages?: string[];
+  hasUI?: boolean;
+  hasAPI?: boolean;
+  cloudProvider?: string[];
 }
 
-export enum StageStatus {
-  NOT_STARTED = 'not_started',
-  IN_PROGRESS = 'in_progress',
-  AWAITING_REVIEW = 'awaiting_review',
-  REVISION_NEEDED = 'revision_needed',
-  APPROVED = 'approved',
-  SKIPPED = 'skipped',
-  FAILED = 'failed',
-}
-
-export interface StageConfig {
-  stage: PipelineStage;
+export interface Skill {
+  id: string;
   name: string;
   description: string;
-  primaryAgent: AgentRole;
-  supportingAgents: AgentRole[];
-  reviewers: AgentRole[];
-  requiredArtifacts: ArtifactType[];
-  producedArtifacts: ArtifactType[];
-  canBeSkipped: boolean;
-  maxRetries: number;
-  timeoutMinutes: number;
-  gateConditions: GateCondition[];
+  category: SkillCategory;
+  compatibleAgents: AgentRole[];
+  promptTemplate: string;
+  expectedArtifacts: ArtifactType[];
+  requiredInputArtifacts?: ArtifactType[];
+  projectFilter?: SkillProjectFilter;
 }
 
-export interface GateCondition {
+// ─── Execution Plan (adaptive pipeline) ───────────────────────────────────────
+
+export interface ExecutionStep {
+  index: number;
+  agent: AgentRole;
+  skills: string[];
+  description: string;
+  dependsOn?: number[];
+  canSkip?: boolean;
+  gateCondition?: string;
+}
+
+export interface ExecutionPlan {
+  id: string;
+  taskType: string;
+  templateId: string;
+  steps: ExecutionStep[];
+  reasoning: string;
+}
+
+export interface PipelineTemplate {
+  id: string;
   name: string;
   description: string;
-  validator: string;
-  required: boolean;
+  steps: ExecutionStep[];
+  applicableWhen: string;
 }
 
-export interface StageTransition {
-  from: PipelineStage;
-  to: PipelineStage;
-  conditions: string[];
-  requiredApprovals: AgentRole[];
-}
-
-export interface StageResult {
-  stage: PipelineStage;
-  status: StageStatus;
+export interface StepResult {
+  stepIndex: number;
+  agent: AgentRole;
+  skills: string[];
+  status: StepStatus;
   startedAt: Date;
   completedAt?: Date;
-  agentResults: AgentResult[];
   artifacts: Artifact[];
   issues: Issue[];
-  metrics: StageMetrics;
-}
-
-export interface StageMetrics {
   tokensUsed: number;
   durationMs: number;
-  retryCount: number;
-  artifactsProduced: number;
-  issuesFound: number;
-  issuesResolved: number;
 }
 
-// ─── Cloud Providers ─────────────────────────────────────────────────────────
+export enum StepStatus {
+  NOT_STARTED = 'not_started',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  SKIPPED = 'skipped',
+}
+
+// ─── Cloud Providers ──────────────────────────────────────────────────────────
 
 export enum CloudProvider {
   AWS = 'aws',
@@ -143,62 +128,49 @@ export enum CloudProvider {
   NONE = 'none',
 }
 
-// ─── Artifacts ───────────────────────────────────────────────────────────────
+// ─── Artifacts ────────────────────────────────────────────────────────────────
 
 export enum ArtifactType {
+  // Planning
   REQUIREMENTS_DOC = 'requirements_doc',
   USER_STORIES = 'user_stories',
   ACCEPTANCE_CRITERIA = 'acceptance_criteria',
+  EXECUTION_PLAN = 'execution_plan',
+  TASK_LIST = 'task_list',
+
+  // Design
   ARCHITECTURE_DOC = 'architecture_doc',
   SYSTEM_DIAGRAM = 'system_diagram',
   API_SPEC = 'api_spec',
   DATA_MODEL = 'data_model',
+  DATABASE_SCHEMA = 'database_schema',
   UI_SPEC = 'ui_spec',
   WIREFRAME = 'wireframe',
   COMPONENT_SPEC = 'component_spec',
-  TASK_LIST = 'task_list',
-  SPRINT_PLAN = 'sprint_plan',
+
+  // Development
   SOURCE_CODE = 'source_code',
   UNIT_TESTS = 'unit_tests',
   INTEGRATION_TESTS = 'integration_tests',
   E2E_TESTS = 'e2e_tests',
-  TEST_PLAN = 'test_plan',
-  TEST_REPORT = 'test_report',
+  API_DOCUMENTATION = 'api_documentation',
+  DEVELOPER_DOCUMENTATION = 'developer_documentation',
+  USER_DOCUMENTATION = 'user_documentation',
+  CHANGELOG = 'changelog',
+
+  // Review
   CODE_REVIEW_REPORT = 'code_review_report',
   SECURITY_REPORT = 'security_report',
-  DEPLOYMENT_PLAN = 'deployment_plan',
-  INFRASTRUCTURE_CONFIG = 'infrastructure_config',
-  CI_CD_CONFIG = 'ci_cd_config',
-  API_DOCUMENTATION = 'api_documentation',
-  USER_DOCUMENTATION = 'user_documentation',
-  DEVELOPER_DOCUMENTATION = 'developer_documentation',
-  CHANGELOG = 'changelog',
-  MONITORING_CONFIG = 'monitoring_config',
-  ALERTING_RULES = 'alerting_rules',
-  SCALING_POLICY = 'scaling_policy',
-  COST_ANALYSIS = 'cost_analysis',
-  SLA_DEFINITION = 'sla_definition',
-  DISASTER_RECOVERY_PLAN = 'disaster_recovery_plan',
-  PERFORMANCE_BENCHMARK = 'performance_benchmark',
-  RUNBOOK = 'runbook',
-  DEVELOPMENT_HISTORY = 'development_history',
-  TECHNOLOGY_DECISION_RECORD = 'technology_decision_record',
-  INTEGRATION_PLAN = 'integration_plan',
-  MIGRATION_STRATEGY = 'migration_strategy',
-  DATABASE_SCHEMA = 'database_schema',
-  MIGRATION_SCRIPT = 'migration_script',
-  QUERY_OPTIMIZATION_REPORT = 'query_optimization_report',
-  LOAD_TEST_PLAN = 'load_test_plan',
   PERFORMANCE_REPORT = 'performance_report',
-  COMPLIANCE_REPORT = 'compliance_report',
-  PRIVACY_IMPACT_ASSESSMENT = 'privacy_impact_assessment',
   ACCESSIBILITY_REPORT = 'accessibility_report',
-  ACCESSIBILITY_TEST_SUITE = 'accessibility_test_suite',
-  BUSINESS_CASE = 'business_case',
-  ROI_ANALYSIS = 'roi_analysis',
-  INCIDENT_RESPONSE_PLAN = 'incident_response_plan',
-  CAPACITY_PLAN = 'capacity_plan',
-  CHAOS_TEST_PLAN = 'chaos_test_plan',
+  TEST_REPORT = 'test_report',
+
+  // Operations
+  DEPLOYMENT_PLAN = 'deployment_plan',
+  CI_CD_CONFIG = 'ci_cd_config',
+  INFRASTRUCTURE_CONFIG = 'infrastructure_config',
+  MONITORING_CONFIG = 'monitoring_config',
+  RUNBOOK = 'runbook',
 }
 
 export interface Artifact {
@@ -233,7 +205,7 @@ export enum ReviewStatus {
   REJECTED = 'rejected',
 }
 
-// ─── Communication ───────────────────────────────────────────────────────────
+// ─── Communication ────────────────────────────────────────────────────────────
 
 export enum MessageType {
   TASK_ASSIGNMENT = 'task_assignment',
@@ -275,7 +247,7 @@ export interface AgentMessage {
 export interface HandoffPayload {
   fromAgent: AgentRole;
   toAgent: AgentRole;
-  stage: PipelineStage;
+  step: string;
   context: string;
   artifacts: Artifact[];
   instructions: string;
@@ -283,7 +255,7 @@ export interface HandoffPayload {
   previousFeedback?: string[];
 }
 
-// ─── Project & Feature ───────────────────────────────────────────────────────
+// ─── Project & Feature ────────────────────────────────────────────────────────
 
 export interface Project {
   id: string;
@@ -317,8 +289,10 @@ export interface Feature {
   requestedBy: string;
   createdAt: Date;
   updatedAt: Date;
-  currentStage: PipelineStage;
-  stageResults: Map<PipelineStage, StageResult>;
+  currentStep: string;
+  currentStepIndex?: number;
+  executionPlan?: ExecutionPlan;
+  stepResults: Map<number, StepResult>;
   artifacts: Artifact[];
   issues: Issue[];
   status: FeatureStatus;
@@ -342,7 +316,7 @@ export enum FeaturePriority {
   CRITICAL = 'critical',
 }
 
-// ─── Issues & Tracking ───────────────────────────────────────────────────────
+// ─── Issues ───────────────────────────────────────────────────────────────────
 
 export interface Issue {
   id: string;
@@ -353,7 +327,8 @@ export interface Issue {
   description: string;
   reportedBy: AgentRole;
   assignedTo?: AgentRole;
-  stage: PipelineStage;
+  step: string;
+  stepIndex?: number;
   status: IssueStatus;
   createdAt: Date;
   resolvedAt?: Date;
@@ -370,12 +345,12 @@ export enum IssueType {
   DOCUMENTATION_GAP = 'documentation_gap',
   DEPENDENCY_ISSUE = 'dependency_issue',
   ARCHITECTURE_CONCERN = 'architecture_concern',
+  ACCESSIBILITY_VIOLATION = 'accessibility_violation',
   SCALABILITY = 'scalability',
   OBSERVABILITY = 'observability',
-  COST_OPTIMIZATION = 'cost_optimization',
   RELIABILITY = 'reliability',
+  COST_OPTIMIZATION = 'cost_optimization',
   COMPLIANCE_VIOLATION = 'compliance_violation',
-  ACCESSIBILITY_VIOLATION = 'accessibility_violation',
   DATA_PRIVACY_CONCERN = 'data_privacy_concern',
 }
 
@@ -395,10 +370,11 @@ export enum IssueStatus {
   DEFERRED = 'deferred',
 }
 
-// ─── Agent Execution ─────────────────────────────────────────────────────────
+// ─── Agent Execution ──────────────────────────────────────────────────────────
 
 export interface AgentResult {
   agentRole: AgentRole;
+  skills?: string[];
   status: 'success' | 'failure' | 'partial';
   output: string;
   artifacts: Artifact[];
@@ -411,8 +387,10 @@ export interface AgentResult {
 export interface AgentTask {
   id: string;
   featureId: string;
-  stage: PipelineStage;
+  step: string;
+  stepIndex?: number;
   assignedTo: AgentRole;
+  activeSkills?: string[];
   title: string;
   description: string;
   instructions: string;
@@ -427,18 +405,18 @@ export interface AgentTask {
   result?: AgentResult;
 }
 
-// ─── Development Tracking ────────────────────────────────────────────────────
+// ─── Development Tracking ─────────────────────────────────────────────────────
 
 export enum TrackingEventType {
   FEATURE_CREATED = 'feature_created',
   PIPELINE_STARTED = 'pipeline_started',
   PIPELINE_COMPLETED = 'pipeline_completed',
   PIPELINE_FAILED = 'pipeline_failed',
-  STAGE_STARTED = 'stage_started',
-  STAGE_COMPLETED = 'stage_completed',
-  STAGE_FAILED = 'stage_failed',
-  STAGE_SKIPPED = 'stage_skipped',
-  STAGE_RETRIED = 'stage_retried',
+  STEP_STARTED = 'step_started',
+  STEP_COMPLETED = 'step_completed',
+  STEP_FAILED = 'step_failed',
+  STEP_SKIPPED = 'step_skipped',
+  STEP_RETRIED = 'step_retried',
   AGENT_TASK_STARTED = 'agent_task_started',
   AGENT_TASK_COMPLETED = 'agent_task_completed',
   AGENT_TASK_FAILED = 'agent_task_failed',
@@ -457,8 +435,10 @@ export interface TrackingEvent {
   type: TrackingEventType;
   featureId?: string;
   featureName?: string;
-  stage?: PipelineStage;
+  step?: string;
+  stepIndex?: number;
   agentRole?: AgentRole;
+  skills?: string[];
   message: string;
   details: Record<string, unknown>;
   durationMs?: number;
@@ -477,23 +457,25 @@ export interface HistorySummary {
   totalFeatures: number;
   completedFeatures: number;
   failedFeatures: number;
-  totalStagesExecuted: number;
+  totalStepsExecuted: number;
   totalArtifactsProduced: number;
   totalIssuesFound: number;
   totalIssuesResolved: number;
   totalTokensUsed: number;
   totalDurationMs: number;
   agentActivity: Record<string, { tasks: number; tokensUsed: number; durationMs: number }>;
-  stageMetrics: Record<string, { runs: number; avgDurationMs: number; avgTokens: number; failureRate: number }>;
+  stepMetrics: Record<string, { runs: number; avgDurationMs: number; avgTokens: number; failureRate: number }>;
+  templateUsage: Record<string, number>;
 }
 
-// ─── CLI Types ───────────────────────────────────────────────────────────────
+// ─── CLI Types ────────────────────────────────────────────────────────────────
 
 export interface CLIOptions {
   projectPath: string;
   verbose: boolean;
   dryRun: boolean;
-  skipStages: PipelineStage[];
+  template?: string;
+  skipSteps: string[];
   maxBudget: number;
   interactive: boolean;
   outputFormat: 'text' | 'json' | 'markdown';
@@ -506,4 +488,20 @@ export interface CLIContext {
   feature: Feature;
   options: CLIOptions;
   startTime: Date;
+}
+
+// ─── Pipeline Result ──────────────────────────────────────────────────────────
+
+export interface PipelineResult {
+  featureId: string;
+  success: boolean;
+  templateUsed: string;
+  stepsCompleted: number[];
+  stepsFailed: number[];
+  stepsSkipped: number[];
+  totalTokensUsed: number;
+  totalDurationMs: number;
+  artifacts: Artifact[];
+  issues: Issue[];
+  executionMode: string;
 }

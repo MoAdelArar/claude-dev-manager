@@ -5,11 +5,10 @@ import {
   type TrackingEvent,
   type DevelopmentHistory,
   type HistorySummary,
-  type StageResult,
+  type StepResult,
   type AgentResult,
   type Feature,
   TrackingEventType,
-  PipelineStage,
   AgentRole,
 } from '../types';
 import logger from '../utils/logger';
@@ -29,8 +28,6 @@ export class DevelopmentTracker {
     this.ensureDir();
     this.loadEvents();
   }
-
-  // ── Event recording ───────────────────────────────────────────────────
 
   recordFeatureCreated(feature: Feature): void {
     this.record({
@@ -64,34 +61,34 @@ export class DevelopmentTracker {
     });
   }
 
-  recordPipelineFailed(featureId: string, featureName: string, failedStage: PipelineStage, error?: string): void {
+  recordPipelineFailed(featureId: string, featureName: string, failedStep: string, error?: string): void {
     this.record({
       type: TrackingEventType.PIPELINE_FAILED,
       featureId,
       featureName,
-      stage: failedStage,
-      message: `Pipeline failed at ${failedStage} for "${featureName}"${error ? `: ${error}` : ''}`,
-      details: { failedStage, error },
+      step: failedStep,
+      message: `Pipeline failed at ${failedStep} for "${featureName}"${error ? `: ${error}` : ''}`,
+      details: { failedStep, error },
     });
   }
 
-  recordStageStarted(featureId: string, stage: PipelineStage, primaryAgent: AgentRole): void {
+  recordStepStarted(featureId: string, stepId: string, primaryAgent: AgentRole): void {
     this.record({
-      type: TrackingEventType.STAGE_STARTED,
+      type: TrackingEventType.STEP_STARTED,
       featureId,
-      stage,
+      step: stepId,
       agentRole: primaryAgent,
-      message: `Stage started: ${stage} (primary: ${primaryAgent})`,
+      message: `Step started: ${stepId} (primary: ${primaryAgent})`,
       details: { primaryAgent },
     });
   }
 
-  recordStageCompleted(featureId: string, stage: PipelineStage, result: StageResult): void {
+  recordStepCompleted(featureId: string, stepId: string, result: StepResult): void {
     this.record({
-      type: TrackingEventType.STAGE_COMPLETED,
+      type: TrackingEventType.STEP_COMPLETED,
       featureId,
-      stage,
-      message: `Stage completed: ${stage} [${result.status}] — ${result.artifacts.length} artifacts, ${result.issues.length} issues`,
+      step: stepId,
+      message: `Step completed: ${stepId} [${result.status}] — ${result.artifacts.length} artifacts, ${result.issues.length} issues`,
       details: {
         status: result.status,
         artifactCount: result.artifacts.length,
@@ -99,42 +96,42 @@ export class DevelopmentTracker {
         artifactNames: result.artifacts.map(a => a.name),
         issueTypes: result.issues.map(i => `${i.severity}:${i.type}`),
       },
-      durationMs: result.metrics.durationMs,
-      tokensUsed: result.metrics.tokensUsed,
+      durationMs: result.durationMs,
+      tokensUsed: result.tokensUsed,
     });
   }
 
-  recordStageFailed(featureId: string, stage: PipelineStage, error: string): void {
+  recordStepFailed(featureId: string, stepId: string, error: string): void {
     this.record({
-      type: TrackingEventType.STAGE_FAILED,
+      type: TrackingEventType.STEP_FAILED,
       featureId,
-      stage,
-      message: `Stage failed: ${stage} — ${error}`,
+      step: stepId,
+      message: `Step failed: ${stepId} — ${error}`,
       details: { error },
     });
   }
 
-  recordStageSkipped(featureId: string, stage: PipelineStage, reason: string): void {
+  recordStepSkipped(featureId: string, stepId: string, reason: string): void {
     this.record({
-      type: TrackingEventType.STAGE_SKIPPED,
+      type: TrackingEventType.STEP_SKIPPED,
       featureId,
-      stage,
-      message: `Stage skipped: ${stage} — ${reason}`,
+      step: stepId,
+      message: `Step skipped: ${stepId} — ${reason}`,
       details: { reason },
     });
   }
 
-  recordStageRetried(featureId: string, stage: PipelineStage, attempt: number, maxRetries: number): void {
+  recordStepRetried(featureId: string, stepId: string, attempt: number, maxRetries: number): void {
     this.record({
-      type: TrackingEventType.STAGE_RETRIED,
+      type: TrackingEventType.STEP_RETRIED,
       featureId,
-      stage,
-      message: `Stage retry: ${stage} (attempt ${attempt}/${maxRetries})`,
+      step: stepId,
+      message: `Step retry: ${stepId} (attempt ${attempt}/${maxRetries})`,
       details: { attempt, maxRetries },
     });
   }
 
-  recordAgentTask(featureId: string, stage: PipelineStage, role: AgentRole, taskTitle: string, result: AgentResult): void {
+  recordAgentTask(featureId: string, stepId: string, role: AgentRole, taskTitle: string, result: AgentResult): void {
     const eventType = result.status === 'success'
       ? TrackingEventType.AGENT_TASK_COMPLETED
       : TrackingEventType.AGENT_TASK_FAILED;
@@ -142,7 +139,7 @@ export class DevelopmentTracker {
     this.record({
       type: eventType,
       featureId,
-      stage,
+      step: stepId,
       agentRole: role,
       message: `${role} ${result.status}: "${taskTitle}" — ${result.artifacts.length} artifacts, ${result.issues.length} issues`,
       details: {
@@ -156,22 +153,22 @@ export class DevelopmentTracker {
     });
   }
 
-  recordArtifactProduced(featureId: string, stage: PipelineStage, artifactName: string, artifactType: string, agentRole: AgentRole): void {
+  recordArtifactProduced(featureId: string, stepId: string, artifactName: string, artifactType: string, agentRole: AgentRole): void {
     this.record({
       type: TrackingEventType.ARTIFACT_PRODUCED,
       featureId,
-      stage,
+      step: stepId,
       agentRole,
       message: `Artifact produced: "${artifactName}" (${artifactType}) by ${agentRole}`,
       details: { artifactName, artifactType },
     });
   }
 
-  recordIssueFound(featureId: string, stage: PipelineStage, issueTitle: string, severity: string, agentRole: AgentRole): void {
+  recordIssueFound(featureId: string, stepId: string, issueTitle: string, severity: string, agentRole: AgentRole): void {
     this.record({
       type: TrackingEventType.ISSUE_FOUND,
       featureId,
-      stage,
+      step: stepId,
       agentRole,
       message: `Issue found [${severity}]: "${issueTitle}" by ${agentRole}`,
       details: { issueTitle, severity },
@@ -185,8 +182,6 @@ export class DevelopmentTracker {
       details: { modules, lines },
     });
   }
-
-  // ── Query ─────────────────────────────────────────────────────────────
 
   getEvents(): TrackingEvent[] {
     return [...this.events];
@@ -204,11 +199,9 @@ export class DevelopmentTracker {
     return this.events.slice(-count);
   }
 
-  // ── Summary computation ───────────────────────────────────────────────
-
   buildSummary(): HistorySummary {
     const agentActivity: HistorySummary['agentActivity'] = {};
-    const stageRuns: Record<string, { durations: number[]; tokens: number[]; failures: number; total: number }> = {};
+    const stepRuns: Record<string, { durations: number[]; tokens: number[]; failures: number; total: number }> = {};
 
     let totalTokens = 0;
     let totalDuration = 0;
@@ -218,6 +211,7 @@ export class DevelopmentTracker {
     let completedFeatures = 0;
     let failedFeatures = 0;
     const featureIds = new Set<string>();
+    const templateUsage: Record<string, number> = {};
 
     for (const event of this.events) {
       if (event.featureId) featureIds.add(event.featureId);
@@ -233,20 +227,25 @@ export class DevelopmentTracker {
         }
       }
 
-      if (event.stage && (event.type === TrackingEventType.STAGE_COMPLETED || event.type === TrackingEventType.STAGE_FAILED)) {
-        if (!stageRuns[event.stage]) {
-          stageRuns[event.stage] = { durations: [], tokens: [], failures: 0, total: 0 };
+      const stepId = event.step;
+      if (stepId && (event.type === TrackingEventType.STEP_COMPLETED || event.type === TrackingEventType.STEP_FAILED)) {
+        if (!stepRuns[stepId]) {
+          stepRuns[stepId] = { durations: [], tokens: [], failures: 0, total: 0 };
         }
-        stageRuns[event.stage].total++;
-        stageRuns[event.stage].durations.push(event.durationMs ?? 0);
-        stageRuns[event.stage].tokens.push(event.tokensUsed ?? 0);
-        if (event.type === TrackingEventType.STAGE_FAILED) stageRuns[event.stage].failures++;
+        stepRuns[stepId].total++;
+        stepRuns[stepId].durations.push(event.durationMs ?? 0);
+        stepRuns[stepId].tokens.push(event.tokensUsed ?? 0);
+        if (event.type === TrackingEventType.STEP_FAILED) stepRuns[stepId].failures++;
       }
 
       if (event.type === TrackingEventType.PIPELINE_COMPLETED) {
         completedFeatures++;
         totalTokens += event.tokensUsed ?? 0;
         totalDuration += event.durationMs ?? 0;
+        const template = (event.details as any)?.template;
+        if (template) {
+          templateUsage[template] = (templateUsage[template] ?? 0) + 1;
+        }
       }
       if (event.type === TrackingEventType.PIPELINE_FAILED) failedFeatures++;
       if (event.type === TrackingEventType.ARTIFACT_PRODUCED) totalArtifacts++;
@@ -254,11 +253,11 @@ export class DevelopmentTracker {
       if (event.type === TrackingEventType.ISSUE_RESOLVED) totalIssuesResolved++;
     }
 
-    const stageMetrics: HistorySummary['stageMetrics'] = {};
-    for (const [stage, data] of Object.entries(stageRuns)) {
+    const stepMetrics: HistorySummary['stepMetrics'] = {};
+    for (const [step, data] of Object.entries(stepRuns)) {
       const avgDur = data.durations.length > 0 ? data.durations.reduce((a, b) => a + b, 0) / data.durations.length : 0;
       const avgTok = data.tokens.length > 0 ? data.tokens.reduce((a, b) => a + b, 0) / data.tokens.length : 0;
-      stageMetrics[stage] = {
+      stepMetrics[step] = {
         runs: data.total,
         avgDurationMs: Math.round(avgDur),
         avgTokens: Math.round(avgTok),
@@ -270,18 +269,17 @@ export class DevelopmentTracker {
       totalFeatures: featureIds.size,
       completedFeatures,
       failedFeatures,
-      totalStagesExecuted: Object.values(stageRuns).reduce((sum, d) => sum + d.total, 0),
+      totalStepsExecuted: Object.values(stepRuns).reduce((sum, d) => sum + d.total, 0),
       totalArtifactsProduced: totalArtifacts,
       totalIssuesFound,
       totalIssuesResolved,
       totalTokensUsed: totalTokens,
       totalDurationMs: totalDuration,
       agentActivity,
-      stageMetrics,
+      stepMetrics,
+      templateUsage,
     };
   }
-
-  // ── Report generation ─────────────────────────────────────────────────
 
   buildHistory(): DevelopmentHistory {
     return {
@@ -301,12 +299,11 @@ export class DevelopmentTracker {
     lines.push(`# Development History: ${history.projectName}`);
     lines.push(`> Generated: ${history.generatedAt}\n`);
 
-    // Summary
     lines.push('## Summary');
     lines.push(`| Metric | Value |`);
     lines.push(`|---|---|`);
     lines.push(`| Features | ${s.totalFeatures} (${s.completedFeatures} completed, ${s.failedFeatures} failed) |`);
-    lines.push(`| Stages executed | ${s.totalStagesExecuted} |`);
+    lines.push(`| Steps executed | ${s.totalStepsExecuted} |`);
     lines.push(`| Artifacts produced | ${s.totalArtifactsProduced} |`);
     lines.push(`| Issues found | ${s.totalIssuesFound} |`);
     lines.push(`| Issues resolved | ${s.totalIssuesResolved} |`);
@@ -314,7 +311,16 @@ export class DevelopmentTracker {
     lines.push(`| Total duration | ${(s.totalDurationMs / 1000).toFixed(1)}s |`);
     lines.push('');
 
-    // Agent activity
+    if (Object.keys(s.templateUsage ?? {}).length > 0) {
+      lines.push('## Template Usage');
+      lines.push('| Template | Count |');
+      lines.push('|---|---|');
+      for (const [template, count] of Object.entries(s.templateUsage!)) {
+        lines.push(`| ${template} | ${count} |`);
+      }
+      lines.push('');
+    }
+
     if (Object.keys(s.agentActivity).length > 0) {
       lines.push('## Agent Activity');
       lines.push('| Agent | Tasks | Tokens | Duration |');
@@ -326,19 +332,17 @@ export class DevelopmentTracker {
       lines.push('');
     }
 
-    // Stage metrics
-    if (Object.keys(s.stageMetrics).length > 0) {
-      lines.push('## Stage Metrics');
-      lines.push('| Stage | Runs | Avg Duration | Avg Tokens | Failure Rate |');
+    if (Object.keys(s.stepMetrics).length > 0) {
+      lines.push('## Step Metrics');
+      lines.push('| Step | Runs | Avg Duration | Avg Tokens | Failure Rate |');
       lines.push('|---|---|---|---|---|');
-      for (const [stage, data] of Object.entries(s.stageMetrics)) {
-        const name = stage.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      for (const [step, data] of Object.entries(s.stepMetrics)) {
+        const name = step.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         lines.push(`| ${name} | ${data.runs} | ${(data.avgDurationMs / 1000).toFixed(1)}s | ${data.avgTokens.toLocaleString()} | ${(data.failureRate * 100).toFixed(0)}% |`);
       }
       lines.push('');
     }
 
-    // Timeline (most recent 100 events)
     const recentEvents = this.events.slice(-100);
     if (recentEvents.length > 0) {
       lines.push('## Timeline\n');
@@ -376,8 +380,6 @@ export class DevelopmentTracker {
     return { markdownPath, jsonPath };
   }
 
-  // ── Internal ──────────────────────────────────────────────────────────
-
   private record(partial: Omit<TrackingEvent, 'id' | 'timestamp' | 'details'> & { details?: Record<string, unknown> }): void {
     const event: TrackingEvent = {
       id: uuidv4(),
@@ -386,16 +388,15 @@ export class DevelopmentTracker {
       ...partial,
     };
     this.events.push(event);
-    this.appendEvent(event); // O(1) single-line append instead of O(n) full rewrite
+    this.appendEvent(event);
     logger.debug(`[tracker] ${event.message}`);
   }
 
-  // Append a single event as a newline-delimited JSON entry. O(1) per event.
   private appendEvent(event: TrackingEvent): void {
     try {
       fs.appendFileSync(this.eventsFile, JSON.stringify(event) + '\n', 'utf-8');
     } catch {
-      // Non-critical — events are already in memory; persisted at saveHistory() time
+      // Non-critical — events are already in memory
     }
   }
 
@@ -406,7 +407,6 @@ export class DevelopmentTracker {
       if (!raw) return;
 
       if (raw.startsWith('[')) {
-        // Legacy format: full JSON array — parse and migrate to NDJSON
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           this.events = parsed.map((e: any) => ({ ...e, timestamp: new Date(e.timestamp) }));
@@ -417,7 +417,6 @@ export class DevelopmentTracker {
           );
         }
       } else {
-        // NDJSON: one JSON object per line
         this.events = raw
           .split('\n')
           .filter(l => l.trim())
@@ -443,11 +442,11 @@ export class DevelopmentTracker {
       [TrackingEventType.PIPELINE_STARTED]: '>',
       [TrackingEventType.PIPELINE_COMPLETED]: 'OK',
       [TrackingEventType.PIPELINE_FAILED]: 'FAIL',
-      [TrackingEventType.STAGE_STARTED]: '>',
-      [TrackingEventType.STAGE_COMPLETED]: 'OK',
-      [TrackingEventType.STAGE_FAILED]: 'FAIL',
-      [TrackingEventType.STAGE_SKIPPED]: 'SKIP',
-      [TrackingEventType.STAGE_RETRIED]: 'RETRY',
+      [TrackingEventType.STEP_STARTED]: '>',
+      [TrackingEventType.STEP_COMPLETED]: 'OK',
+      [TrackingEventType.STEP_FAILED]: 'FAIL',
+      [TrackingEventType.STEP_SKIPPED]: 'SKIP',
+      [TrackingEventType.STEP_RETRIED]: 'RETRY',
       [TrackingEventType.AGENT_TASK_STARTED]: '>',
       [TrackingEventType.AGENT_TASK_COMPLETED]: 'OK',
       [TrackingEventType.AGENT_TASK_FAILED]: 'FAIL',

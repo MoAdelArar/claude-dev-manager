@@ -12,10 +12,9 @@ import {
   ArtifactStatus,
   ReviewStatus,
   AgentRole,
-  PipelineStage,
   HandoffPayload,
-  StageResult,
-  StageStatus,
+  StepResult,
+  StepStatus,
   Issue,
   IssueSeverity,
   IssueType,
@@ -29,7 +28,7 @@ function createTestArtifact(overrides: Partial<Artifact> = {}): Artifact {
     name: 'Test Requirements',
     description: 'Test requirements document',
     filePath: 'test/requirements.md',
-    createdBy: AgentRole.PRODUCT_MANAGER,
+    createdBy: AgentRole.PLANNER,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -49,8 +48,8 @@ function createTestIssue(severity: IssueSeverity): Issue {
     severity,
     title: 'Test Issue',
     description: 'Test issue description',
-    reportedBy: AgentRole.QA_ENGINEER,
-    stage: PipelineStage.TESTING,
+    reportedBy: AgentRole.REVIEWER,
+    step: 'step-1',
     status: IssueStatus.OPEN,
     createdAt: new Date(),
   };
@@ -98,13 +97,13 @@ describe('Validators', () => {
 
   describe('validateHandoff', () => {
     const validHandoff: HandoffPayload = {
-      fromAgent: AgentRole.PRODUCT_MANAGER,
-      toAgent: AgentRole.ENGINEERING_MANAGER,
-      stage: PipelineStage.REQUIREMENTS_GATHERING,
-      context: 'Requirements complete, handing off for task breakdown',
+      fromAgent: AgentRole.PLANNER,
+      toAgent: AgentRole.ARCHITECT,
+      step: 'step-1',
+      context: 'Requirements complete, handing off for architecture design',
       artifacts: [createTestArtifact()],
-      instructions: 'Please review requirements and create task breakdown',
-      constraints: ['Follow sprint capacity limits'],
+      instructions: 'Please review requirements and create system architecture',
+      constraints: ['Follow scalability requirements'],
     };
 
     it('should return no errors for a valid handoff', () => {
@@ -113,7 +112,7 @@ describe('Validators', () => {
     });
 
     it('should return error when handing off to same agent', () => {
-      const handoff = { ...validHandoff, toAgent: AgentRole.PRODUCT_MANAGER };
+      const handoff = { ...validHandoff, toAgent: AgentRole.PLANNER };
       const errors = validateHandoff(handoff);
       expect(errors.some((e) => e.field === 'toAgent')).toBe(true);
     });
@@ -134,6 +133,12 @@ describe('Validators', () => {
       const handoff = { ...validHandoff, fromAgent: 'invalid' as AgentRole };
       const errors = validateHandoff(handoff);
       expect(errors.some((e) => e.field === 'fromAgent')).toBe(true);
+    });
+
+    it('should return error for missing step', () => {
+      const handoff = { ...validHandoff, step: '' };
+      const errors = validateHandoff(handoff);
+      expect(errors.some((e) => e.field === 'step')).toBe(true);
     });
   });
 
@@ -182,42 +187,48 @@ describe('Validators', () => {
 
   describe('hasBlockingIssues', () => {
     it('should return true when critical issues exist', () => {
-      const stageResult: StageResult = {
-        stage: PipelineStage.TESTING,
-        status: StageStatus.IN_PROGRESS,
+      const stepResult: StepResult = {
+        stepIndex: 0,
+        agent: AgentRole.DEVELOPER,
+        skills: ['code-implementation'],
+        status: StepStatus.IN_PROGRESS,
         startedAt: new Date(),
-        agentResults: [],
         artifacts: [],
         issues: [createTestIssue(IssueSeverity.CRITICAL)],
-        metrics: { tokensUsed: 0, durationMs: 0, retryCount: 0, artifactsProduced: 0, issuesFound: 1, issuesResolved: 0 },
+        tokensUsed: 0,
+        durationMs: 0,
       };
-      expect(hasBlockingIssues(stageResult)).toBe(true);
+      expect(hasBlockingIssues(stepResult)).toBe(true);
     });
 
     it('should return true when high severity issues exist', () => {
-      const stageResult: StageResult = {
-        stage: PipelineStage.TESTING,
-        status: StageStatus.IN_PROGRESS,
+      const stepResult: StepResult = {
+        stepIndex: 0,
+        agent: AgentRole.DEVELOPER,
+        skills: ['code-implementation'],
+        status: StepStatus.IN_PROGRESS,
         startedAt: new Date(),
-        agentResults: [],
         artifacts: [],
         issues: [createTestIssue(IssueSeverity.HIGH)],
-        metrics: { tokensUsed: 0, durationMs: 0, retryCount: 0, artifactsProduced: 0, issuesFound: 1, issuesResolved: 0 },
+        tokensUsed: 0,
+        durationMs: 0,
       };
-      expect(hasBlockingIssues(stageResult)).toBe(true);
+      expect(hasBlockingIssues(stepResult)).toBe(true);
     });
 
     it('should return false when only low severity issues exist', () => {
-      const stageResult: StageResult = {
-        stage: PipelineStage.TESTING,
-        status: StageStatus.IN_PROGRESS,
+      const stepResult: StepResult = {
+        stepIndex: 0,
+        agent: AgentRole.DEVELOPER,
+        skills: ['code-implementation'],
+        status: StepStatus.IN_PROGRESS,
         startedAt: new Date(),
-        agentResults: [],
         artifacts: [],
         issues: [createTestIssue(IssueSeverity.LOW)],
-        metrics: { tokensUsed: 0, durationMs: 0, retryCount: 0, artifactsProduced: 0, issuesFound: 1, issuesResolved: 0 },
+        tokensUsed: 0,
+        durationMs: 0,
       };
-      expect(hasBlockingIssues(stageResult)).toBe(false);
+      expect(hasBlockingIssues(stepResult)).toBe(false);
     });
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "claude-dev-manager",
-  "version": "1.0.7",
-  "description": "Multi-agent development management system powered by Claude Code",
+  "version": "2.0.0",
+  "description": "AI-powered development manager — 5 agents, 17 composable skills, 6 pipeline templates, powered by Claude Code",
   "main": "dist/cli.js",
   "types": "dist/types.d.ts",
   "bin": {
@@ -41,10 +41,13 @@
     "project-management",
     "multi-agent",
     "software-engineering",
+    "pipeline",
+    "skills",
     "devops",
     "aws",
     "gcp",
     "azure",
+    "mcp",
     "rtk"
   ],
   "optionalBinaryDependencies": {

@@ -8,9 +8,7 @@ import {
   type Feature,
   FeatureStatus,
   FeaturePriority,
-  PipelineStage,
-  type StageResult,
-  StageStatus,
+  type StepResult,
   CloudProvider,
 } from '../types';
 import logger from '../utils/logger';
@@ -66,8 +64,8 @@ export class ProjectContext {
       requestedBy: 'user',
       createdAt: new Date(),
       updatedAt: new Date(),
-      currentStage: PipelineStage.REQUIREMENTS_GATHERING,
-      stageResults: new Map(),
+      currentStep: 'pending',
+      stepResults: new Map(),
       artifacts: [],
       issues: [],
       status: FeatureStatus.DRAFT,
@@ -106,10 +104,10 @@ export class ProjectContext {
     }
   }
 
-  updateFeatureStage(featureId: string, stage: PipelineStage): void {
+  updateFeatureStep(featureId: string, step: string): void {
     const feature = this.features.get(featureId);
     if (feature) {
-      feature.currentStage = stage;
+      feature.currentStep = step;
       feature.updatedAt = new Date();
       if (feature.status === FeatureStatus.DRAFT) {
         feature.status = FeatureStatus.IN_PROGRESS;
@@ -118,10 +116,10 @@ export class ProjectContext {
     }
   }
 
-  recordStageResult(featureId: string, result: StageResult): void {
+  recordStepResult(featureId: string, result: StepResult): void {
     const feature = this.features.get(featureId);
     if (feature) {
-      feature.stageResults.set(result.stage, result);
+      feature.stepResults.set(result.stepIndex, result);
       feature.artifacts.push(...result.artifacts);
       feature.issues.push(...result.issues);
       feature.updatedAt = new Date();
@@ -133,7 +131,7 @@ export class ProjectContext {
     const feature = this.features.get(featureId);
     if (feature) {
       feature.status = FeatureStatus.COMPLETED;
-      feature.currentStage = PipelineStage.COMPLETED;
+      feature.currentStep = 'completed';
       feature.updatedAt = new Date();
       this.saveFeature(feature);
       logger.info(`Feature completed: ${feature.name}`);
@@ -687,7 +685,7 @@ export class ProjectContext {
     const filePath = path.join(this.stateDir, 'features', `${feature.id}.json`);
     const serializable = {
       ...feature,
-      stageResults: Object.fromEntries(feature.stageResults),
+      stepResults: Object.fromEntries(feature.stepResults),
     };
     fs.writeFileSync(filePath, JSON.stringify(serializable, null, 2), 'utf-8');
   }
@@ -704,7 +702,18 @@ export class ProjectContext {
         const data = JSON.parse(content);
         data.createdAt = new Date(data.createdAt);
         data.updatedAt = new Date(data.updatedAt);
-        data.stageResults = new Map(Object.entries(data.stageResults ?? {}));
+        data.stepResults = new Map(
+          Object.entries(data.stepResults ?? {}).map(([k, v]) => {
+            const sr = v as Record<string, unknown>;
+            if (sr.startedAt && typeof sr.startedAt === 'string') {
+              sr.startedAt = new Date(sr.startedAt);
+            }
+            if (sr.completedAt && typeof sr.completedAt === 'string') {
+              sr.completedAt = new Date(sr.completedAt);
+            }
+            return [Number(k), sr];
+          }),
+        );
         const feature = data as Feature;
         this.features.set(feature.id, feature);
         this.project.features.push(feature);

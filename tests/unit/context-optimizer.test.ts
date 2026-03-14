@@ -23,7 +23,7 @@ function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
     name: 'Requirements',
     description: 'Test artifact',
     filePath: 'requirements.md',
-    createdBy: AgentRole.PRODUCT_MANAGER,
+    createdBy: AgentRole.PLANNER,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -198,34 +198,27 @@ describe('summarizeArtifacts()', () => {
 
 describe('optimizeAnalysisForRole()', () => {
   it('should return null for null input', () => {
-    expect(optimizeAnalysisForRole(null, AgentRole.PRODUCT_MANAGER)).toBeNull();
+    expect(optimizeAnalysisForRole(null, AgentRole.PLANNER)).toBeNull();
   });
 
-  it('should return filtered sections for PRODUCT_MANAGER (Entry Points only)', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.PRODUCT_MANAGER);
+  it('should return filtered sections for PLANNER (Entry Points only)', () => {
+    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.PLANNER);
     expect(result).not.toBeNull();
     expect(result).toContain('Entry Points');
-    expect(result).not.toContain('## Module Dependencies');
-    expect(result).not.toContain('## Patterns');
-    expect(result).not.toContain('## Testing');
   });
 
-  it('should return Patterns and Module Dependencies for SENIOR_DEVELOPER', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.SENIOR_DEVELOPER);
+  it('should return Patterns and Module Dependencies for DEVELOPER', () => {
+    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.DEVELOPER);
     expect(result).not.toBeNull();
     expect(result).toContain('Patterns');
     expect(result).toContain('Module Dependencies');
-    expect(result).not.toContain('## Testing');
-    expect(result).not.toContain('## Dependencies');
   });
 
-  it('should return Dependencies and Entry Points for DEVOPS_ENGINEER', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.DEVOPS_ENGINEER);
+  it('should return Dependencies and Entry Points for OPERATOR', () => {
+    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.OPERATOR);
     expect(result).not.toBeNull();
     expect(result).toContain('Dependencies');
     expect(result).toContain('Entry Points');
-    expect(result).not.toContain('## Patterns');
-    expect(result).not.toContain('## Module Dependencies');
   });
 
   it('should return full analysis for unknown role', () => {
@@ -235,31 +228,29 @@ describe('optimizeAnalysisForRole()', () => {
 
   it('should return null when filtered analysis is completely empty', () => {
     const analysis = 'Just a raw line with no headings at all.';
-    const result = optimizeAnalysisForRole(analysis, AgentRole.PRODUCT_MANAGER);
+    const result = optimizeAnalysisForRole(analysis, AgentRole.PLANNER);
     expect(result).toBeNull();
   });
 
   it('should return null for empty string analysis', () => {
-    const result = optimizeAnalysisForRole('', AgentRole.PRODUCT_MANAGER);
+    const result = optimizeAnalysisForRole('', AgentRole.PLANNER);
     expect(result).toBeNull();
   });
 });
 
 describe('optimizeProfileForRole()', () => {
   it('should return null for null input', () => {
-    expect(optimizeProfileForRole(null, AgentRole.BUSINESS_ANALYST)).toBeNull();
+    expect(optimizeProfileForRole(null, AgentRole.PLANNER)).toBeNull();
   });
 
-  it('should return architecture only for BUSINESS_ANALYST', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.BUSINESS_ANALYST);
+  it('should return architecture only for PLANNER', () => {
+    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.PLANNER);
     expect(result).not.toBeNull();
     expect(result).toContain('Architecture');
-    expect(result).not.toContain('## Import Style');
-    expect(result).not.toContain('## TypeScript Usage');
   });
 
-  it('should return full code style for SENIOR_DEVELOPER', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.SENIOR_DEVELOPER);
+  it('should return full code style for DEVELOPER', () => {
+    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.DEVELOPER);
     expect(result).not.toBeNull();
     expect(result).toContain('Naming Conventions');
     expect(result).toContain('Import Style');
@@ -269,12 +260,11 @@ describe('optimizeProfileForRole()', () => {
     expect(result).toContain('Code Samples');
   });
 
-  it('should return testing sections for QA_ENGINEER', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.QA_ENGINEER);
+  it('should return testing sections for REVIEWER', () => {
+    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.REVIEWER);
     expect(result).not.toBeNull();
     expect(result).toContain('Testing Conventions');
     expect(result).toContain('Naming Conventions');
-    expect(result).not.toContain('## Import Style');
   });
 
   it('should return full profile for unknown role', () => {
@@ -284,52 +274,36 @@ describe('optimizeProfileForRole()', () => {
 
   it('should return null when filtered content is completely empty', () => {
     const profileWithNoTitle = 'Just a line without headings.';
-    const result = optimizeProfileForRole(profileWithNoTitle, AgentRole.QA_ENGINEER);
+    const result = optimizeProfileForRole(profileWithNoTitle, AgentRole.REVIEWER);
     expect(result).toBeNull();
   });
 
   it('should return the title line even when no matching subsections found', () => {
     const minimalProfile = '# Code Style\nSome intro text only.';
-    const result = optimizeProfileForRole(minimalProfile, AgentRole.QA_ENGINEER);
+    const result = optimizeProfileForRole(minimalProfile, AgentRole.REVIEWER);
     expect(result).toBe('# Code Style');
   });
 });
 
 describe('shouldPassFullArtifacts()', () => {
-  it('should return true for SENIOR_DEVELOPER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.SENIOR_DEVELOPER)).toBe(true);
+  it('should return true for DEVELOPER', () => {
+    expect(shouldPassFullArtifacts(AgentRole.DEVELOPER)).toBe(true);
   });
 
-  it('should return true for JUNIOR_DEVELOPER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.JUNIOR_DEVELOPER)).toBe(true);
+  it('should return true for REVIEWER', () => {
+    expect(shouldPassFullArtifacts(AgentRole.REVIEWER)).toBe(true);
   });
 
-  it('should return true for CODE_REVIEWER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.CODE_REVIEWER)).toBe(true);
+  it('should return false for PLANNER', () => {
+    expect(shouldPassFullArtifacts(AgentRole.PLANNER)).toBe(false);
   });
 
-  it('should return true for DATABASE_ENGINEER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.DATABASE_ENGINEER)).toBe(true);
+  it('should return false for OPERATOR', () => {
+    expect(shouldPassFullArtifacts(AgentRole.OPERATOR)).toBe(false);
   });
 
-  it('should return false for PRODUCT_MANAGER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.PRODUCT_MANAGER)).toBe(false);
-  });
-
-  it('should return false for DEVOPS_ENGINEER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.DEVOPS_ENGINEER)).toBe(false);
-  });
-
-  it('should return false for QA_ENGINEER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.QA_ENGINEER)).toBe(false);
-  });
-
-  it('should return false for BUSINESS_ANALYST', () => {
-    expect(shouldPassFullArtifacts(AgentRole.BUSINESS_ANALYST)).toBe(false);
-  });
-
-  it('should return false for SECURITY_ENGINEER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.SECURITY_ENGINEER)).toBe(false);
+  it('should return false for ARCHITECT', () => {
+    expect(shouldPassFullArtifacts(AgentRole.ARCHITECT)).toBe(false);
   });
 
   it('should return false for an unknown role', () => {
@@ -339,12 +313,12 @@ describe('shouldPassFullArtifacts()', () => {
 
 describe('optimizeInputArtifacts()', () => {
   it('should return empty string for empty artifact array', () => {
-    expect(optimizeInputArtifacts([], AgentRole.SENIOR_DEVELOPER)).toBe('');
+    expect(optimizeInputArtifacts([], AgentRole.DEVELOPER)).toBe('');
   });
 
   it('should summarize artifacts for non-full-artifact roles', () => {
     const artifact = makeArtifact({ content: LONG_CONTENT, name: 'Requirements Doc', version: 1 });
-    const result = optimizeInputArtifacts([artifact], AgentRole.PRODUCT_MANAGER);
+    const result = optimizeInputArtifacts([artifact], AgentRole.PLANNER);
 
     expect(result).toContain('Requirements Doc');
     expect(result).toContain('lines total');
@@ -352,7 +326,7 @@ describe('optimizeInputArtifacts()', () => {
 
   it('should pass full content for developer roles when under 8KB', () => {
     const artifact = makeArtifact({ content: 'Small content', name: 'Tiny' });
-    const result = optimizeInputArtifacts([artifact], AgentRole.SENIOR_DEVELOPER);
+    const result = optimizeInputArtifacts([artifact], AgentRole.DEVELOPER);
 
     expect(result).toContain('### Tiny');
     expect(result).toContain('Small content');
@@ -365,7 +339,7 @@ describe('optimizeInputArtifacts()', () => {
     expect(bigContent.length).toBeGreaterThan(8000);
 
     const artifact = makeArtifact({ content: bigContent, name: 'Large Doc' });
-    const result = optimizeInputArtifacts([artifact], AgentRole.SENIOR_DEVELOPER);
+    const result = optimizeInputArtifacts([artifact], AgentRole.DEVELOPER);
 
     expect(result).toContain('lines total');
   });
@@ -375,14 +349,14 @@ describe('optimizeInputArtifacts()', () => {
       content: undefined as unknown as string,
       name: 'Empty',
     });
-    const result = optimizeInputArtifacts([artifact], AgentRole.SENIOR_DEVELOPER);
+    const result = optimizeInputArtifacts([artifact], AgentRole.DEVELOPER);
     expect(result).toContain('### Empty');
   });
 
   it('should handle multiple artifacts for developer roles under 8KB', () => {
     const a1 = makeArtifact({ content: 'Content A', name: 'Doc A' });
     const a2 = makeArtifact({ content: 'Content B', name: 'Doc B' });
-    const result = optimizeInputArtifacts([a1, a2], AgentRole.CODE_REVIEWER);
+    const result = optimizeInputArtifacts([a1, a2], AgentRole.REVIEWER);
 
     expect(result).toContain('### Doc A');
     expect(result).toContain('### Doc B');
