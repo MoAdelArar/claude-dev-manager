@@ -203,7 +203,7 @@ export class OperatorAgent extends BaseAgent {
     return issues;
   }
 
-  private generateCiCdConfig(task: AgentTask): string {
+  private generateCiCdConfig(_task: AgentTask): string {
     return `name: CI/CD Pipeline
 
 on:
@@ -290,7 +290,7 @@ Deployment strategy for: ${task.title}
 `;
   }
 
-  private generateInfraConfig(task: AgentTask): string {
+  private generateInfraConfig(_task: AgentTask): string {
     return `# Infrastructure Configuration
 
 ## Resources
@@ -323,7 +323,7 @@ DATABASE_URL=<secret>
 `;
   }
 
-  private generateMonitoringConfig(task: AgentTask): string {
+  private generateMonitoringConfig(_task: AgentTask): string {
     return `# Monitoring Configuration
 
 ## Metrics

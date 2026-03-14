@@ -1,7 +1,8 @@
 {
   "name": "claude-dev-manager",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "AI-powered development manager — 5 agents, 17 composable skills, 6 pipeline templates, powered by Claude Code",
+  "type": "module",
   "main": "dist/cli.js",
   "types": "dist/types.d.ts",
   "bin": {
@@ -17,21 +18,22 @@
     "LICENSE"
   ],
   "scripts": {
-    "postinstall": "node scripts/postinstall.js || true",
+    "postinstall": "node scripts/postinstall.cjs || true",
     "build": "tsc",
+    "build:bun": "bun build src/cli/index.tsx --outdir dist --target node && bun build src/mcp-server.ts --outdir dist --target node",
     "start": "node dist/cli.js",
-    "dev": "ts-node src/cli.ts",
-    "test": "jest --coverage",
-    "test:unit": "jest --testPathPattern=tests/unit",
-    "test:integration": "jest --testPathPattern=tests/integration",
-    "test:e2e": "jest --testPathPattern=tests/e2e --testTimeout=120000",
+    "dev": "tsx src/cli/index.tsx",
+    "test": "bun test --coverage",
+    "test:unit": "bun test --test-name-pattern unit",
+    "test:integration": "bun test --test-name-pattern integration",
+    "test:e2e": "bun test --test-name-pattern e2e --timeout 120000",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "mcp": "node dist/mcp-server.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "pretest": "npm run typecheck",
-    "prepublishOnly": "npm run lint && npm test && npm run build"
+    "pretest": "bun run typecheck",
+    "prepublishOnly": "bun run lint && bun test && bun run build"
   },
   "keywords": [
     "claude",
@@ -67,25 +69,29 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "chalk": "^4.1.2",
-    "commander": "^12.1.0",
-    "enquirer": "^2.4.1",
-    "ora": "^5.4.1",
+    "bun": "^1.3.10",
+    "ink": "^6.8.0",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-table": "^3.1.0",
+    "ink-text-input": "^6.0.0",
+    "pastel": "^4.0.0",
+    "react": "^19.0.0",
     "uuid": "^10.0.0",
     "winston": "^3.17.0",
     "yaml": "^2.6.1",
-    "zod": "^3.25.1"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.14",
+    "@types/bun": "^1.3.10",
     "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.16.0",
     "@typescript-eslint/parser": "^8.16.0",
     "eslint": "^9.15.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
-    "ts-node": "^10.9.2",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2"
   },
   "engines": {

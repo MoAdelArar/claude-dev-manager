@@ -286,11 +286,11 @@ End with a Recommendations section for the next step.`;
     return `Agent ${this.config.title}${skills} completed work on task: ${this.currentTask.title}`;
   }
 
-  protected buildHandoffInstructions(toAgent: AgentRole, step: string): string {
+  protected buildHandoffInstructions(_toAgent: AgentRole, step: string): string {
     return `Continuing pipeline at step ${step}. Please review provided artifacts and proceed with your responsibilities.`;
   }
 
-  protected getHandoffConstraints(toAgent: AgentRole): string[] {
+  protected getHandoffConstraints(_toAgent: AgentRole): string[] {
     return [
       'Maintain consistency with previous artifacts',
       'Do not modify approved artifacts without requesting a revision',

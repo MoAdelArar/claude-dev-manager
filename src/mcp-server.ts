@@ -5,10 +5,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 
 const server = new McpServer({
   name: 'claude-dev-manager',
-  version: '2.0.0',
+  version: '2.2.0',
 });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -25,7 +26,6 @@ function readFileIfExists(filePath: string): string | null {
 }
 
 function runCli(args: string, projectPath: string): string {
-  const { execSync } = require('node:child_process');
   const cliPath = path.join(__dirname, 'cli.js');
   return execSync(`node "${cliPath}" ${args} --project "${projectPath}"`, {
     stdio: 'pipe',

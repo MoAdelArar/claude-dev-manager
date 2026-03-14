@@ -2,6 +2,8 @@
 
 An AI-powered development management system that orchestrates **5 versatile agents** with **17 composable skills** through **adaptive pipeline templates** — from requirements to production deployment. CDM works on **new and existing projects**, respects your code style, and generates production-ready artifacts for **AWS, GCP, and Azure**.
 
+Built with **React + Ink** for a rich terminal UI experience.
+
 Think of it as a virtual engineering team you manage through a single CLI.
 
 ---
@@ -92,13 +94,16 @@ CDM will detect RTK automatically. If not installed, CDM works fine — you'll j
 
 ```bash
 cdm --version
-# 2.0.0
+# 2.2.0
 
 cdm agents
 # Lists all 5 agents with their skills
 
 cdm skills
 # Lists all 17 skills by category
+
+cdm dashboard
+# Shows project overview with stats, artifacts, and issues
 ```
 
 ---
@@ -141,14 +146,43 @@ Pipeline:
 
 ### Step 3: Start a feature pipeline
 
+**Option A: Interactive wizard (recommended for new users)**
+
+```bash
+cdm start
+```
+
+The interactive wizard guides you through:
+1. Feature description (free text)
+2. Template selection (quick-fix, feature, full-feature, etc.)
+3. Priority level (low, medium, high, critical)
+
+**Option B: Direct command**
+
 ```bash
 cdm start "Add user authentication with JWT and refresh tokens"
+```
+
+**Option C: Get a cost estimate first**
+
+```bash
+cdm start "Add user authentication" --estimate
+```
+
+```
+📊 Pipeline Cost Estimate
+
+Template:     feature (auto-detected)
+Est. Tokens:  ~80,000 - 120,000
+Est. Cost:    ~$2.40 - $3.60
+Est. Time:    ~3 - 5 minutes
+Agents:       Planner → Architect → Developer → Reviewer
 ```
 
 Watch the pipeline execute — the Planner selects the `feature` template automatically:
 
 ```
-🚀 Claude Dev Manager v2.0.0
+🚀 Claude Dev Manager v2.2.0
 
 Project: my-project
 Language: typescript | Framework: express
@@ -328,11 +362,12 @@ cdm analyze --json                # Also output raw JSON
 cdm analyze -o custom-path.md     # Custom output path
 ```
 
-### `cdm start <description>`
+### `cdm start [description]`
 
-Start a new feature pipeline.
+Start a new feature pipeline. Launches an **interactive wizard** if no description is provided.
 
 ```bash
+cdm start                                 # Interactive wizard
 cdm start "Add user authentication"
 cdm start "Add OAuth2 login" --priority critical
 cdm start "Fix typo in header" --template quick-fix
@@ -342,6 +377,7 @@ cdm start "Add payments" --model claude-sonnet-4-20250514
 cdm start "Add API v2" --max-retries 3
 cdm start "Refactor auth" --dry-run
 cdm start "Quick fix" --no-interactive
+cdm start "Add feature" --estimate        # Show cost estimate only
 ```
 
 | Option | Description | Default |
@@ -353,6 +389,7 @@ cdm start "Quick fix" --no-interactive
 | `--model` | Claude model override | system default |
 | `--max-retries` | Retries per step | `2` |
 | `--dry-run` | Show plan without executing | `false` |
+| `--estimate` | Show cost/time estimate without running | `false` |
 | `--no-interactive` | Skip prompts | `false` |
 | `-v, --verbose` | Debug output | `false` |
 | `--json` | Output result as JSON | `false` |
@@ -436,6 +473,31 @@ cdm config                                      # View all
 cdm config --set project.cloudProvider=gcp       # Change cloud provider
 cdm config --set pipeline.maxRetries=3           # Change retries
 cdm config --reset                               # Back to defaults
+```
+
+### `cdm dashboard`
+
+Display a TUI dashboard with project overview, stats, recent artifacts, and open issues.
+
+```bash
+cdm dashboard
+cdm dashboard --json                  # Output as JSON
+cdm dashboard --project ~/my-app      # Specific project
+```
+
+### `cdm completion <shell>`
+
+Generate shell completion scripts for bash, zsh, or fish.
+
+```bash
+cdm completion bash                   # Print bash completions
+cdm completion zsh                    # Print zsh completions
+cdm completion fish                   # Print fish completions
+
+# Install completions
+cdm completion bash > /etc/bash_completion.d/cdm
+cdm completion zsh > ~/.zsh/completions/_cdm
+cdm completion fish > ~/.config/fish/completions/cdm.fish
 ```
 
 ---
@@ -681,6 +743,12 @@ If you prefer to register manually, add to `~/.claude/mcp_servers.json`:
 
 ```
 src/
+  cli/              # React + Ink terminal UI
+    commands/       # Command components (start, status, dashboard, etc.)
+    components/     # Reusable UI components (Spinner, Header, StatusBadge, etc.)
+    hooks/          # React hooks (useProject, useConfig, usePipeline, etc.)
+    utils/          # CLI utilities (colors, formatting, completions)
+    index.tsx       # Pastel CLI entry point
   agents/           # 5 agents: planner, architect, developer, reviewer, operator
   skills/           # 17 skill definitions + SkillRegistry
   analyzer/         # ProjectAnalyzer + CodeStyleProfiler
@@ -691,9 +759,8 @@ src/
   pipeline/         # templates.ts (6 templates), executor.ts (step runner)
   tracker/          # Event log, metrics, token usage
   workspace/        # ArtifactStore (versioned CRUD in .cdm/)
-  utils/            # Config (YAML), logger, validators (Zod)
+  utils/            # Config (YAML), logger, validators (Zod), cost-estimator
   types.ts          # All shared types — single source of truth
-  cli.ts            # CLI entry point (npm/terminal)
   mcp-server.ts     # MCP server entry point (Claude Code plugin)
 commands/           # Slash commands for Claude Code (/cdm-*)
 scripts/            # install.sh for Claude Code registration
@@ -708,16 +775,23 @@ tests/
 ## Development
 
 ```bash
-npm run dev          # Run CLI via ts-node (no build needed)
+npm run dev          # Run CLI via tsx (no build needed)
 npm run build        # Compile TypeScript
+npm run build:bun    # Build with Bun (faster, if available)
 npm run mcp          # Start MCP server (for testing)
-npm test             # Type-check + run all tests with coverage
+npm test             # Run all tests with coverage (requires Bun)
 npm run test:unit    # Unit tests only
 npm run test:e2e     # E2E tests only
 npm run lint         # Lint source code
 npm run lint:fix     # Auto-fix lint issues
 npm run typecheck    # Type-check without building
 ```
+
+**Tech Stack:**
+- **CLI Framework:** React + Ink (terminal UI) + Pastel (command routing)
+- **Type Safety:** TypeScript + Zod for runtime validation
+- **Build:** TypeScript compiler (tsc) or Bun
+- **Testing:** Bun test runner
 
 ---
 

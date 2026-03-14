@@ -4,12 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   type Feature,
   AgentRole,
-  type Artifact,
-  type Issue,
   FeatureStatus,
   type ExecutionPlan,
   type PipelineResult,
-  ArtifactType,
 } from '../types';
 import { AgentRegistry, type ProjectContext as AgentProjectContext } from '../agents/index';
 import { type ArtifactStore } from '../workspace/artifact-store';
@@ -27,7 +24,15 @@ import {
   getAllTemplates,
   type PipelineTemplate,
 } from '../pipeline/templates';
-import { PlannerAgent } from '../agents/planner';
+import type { PlannerAgent } from '../agents/planner';
+
+export interface StreamingCallbacks {
+  onAgentOutput?: (agent: AgentRole, line: string) => void;
+  onFileCreated?: (path: string) => void;
+  onFileModified?: (path: string, linesChanged: number) => void;
+  onTestResult?: (passed: number, failed: number, total: number) => void;
+  onProgress?: (percent: number, message: string) => void;
+}
 
 export interface PipelineOptions {
   skipSteps?: string[];
@@ -40,12 +45,8 @@ export interface PipelineOptions {
   onStepComplete?: (step: { index: number; description: string }) => void;
   onAgentWork?: (role: AgentRole, task: unknown) => void;
   onError?: (stepIndex: number, error: Error) => void;
+  streaming?: StreamingCallbacks;
 }
-
-const CODE_ROLES = new Set<AgentRole>([
-  AgentRole.DEVELOPER,
-  AgentRole.REVIEWER,
-]);
 
 export class PipelineOrchestrator {
   private agentRegistry: AgentRegistry;
@@ -112,7 +113,7 @@ export class PipelineOrchestrator {
     feature: Feature,
     options: PipelineOptions,
   ): Promise<PipelineResult> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
 
     pipelineLog(`Starting pipeline for feature: ${feature.name}`);
     const modeReason = this.bridge.isNestedClaudeSession()
@@ -218,7 +219,7 @@ export class PipelineOrchestrator {
 
   private async generateExecutionPlan(
     feature: Feature,
-    options: PipelineOptions,
+    _options: PipelineOptions,
   ): Promise<ExecutionPlan> {
     const match = matchTemplate(feature.description);
 
@@ -240,7 +241,7 @@ export class PipelineOrchestrator {
     return plan;
   }
 
-  private createPlanFromTemplate(template: PipelineTemplate, feature: Feature): ExecutionPlan {
+  private createPlanFromTemplate(template: PipelineTemplate, _feature: Feature): ExecutionPlan {
     return {
       id: uuidv4(),
       taskType: template.id,

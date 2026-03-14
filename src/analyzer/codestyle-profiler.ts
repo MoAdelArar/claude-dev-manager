@@ -460,7 +460,7 @@ export class CodeStyleProfiler {
     if (lang === 'python') {
       const tryExcept = (allCode.match(/\btry\s*:/g) ?? []).length;
       const customExceptions = (allCode.match(/class\s+\w+(?:Error|Exception)\s*\(/g) ?? []).length;
-      const raiseCount = (allCode.match(/\braise\s+\w+/g) ?? []).length;
+      const _raiseCount = (allCode.match(/\braise\s+\w+/g) ?? []).length;
 
       return {
         strategy: tryExcept > 0 ? 'try/except blocks' : 'Exceptions (raise)',
@@ -502,7 +502,7 @@ export class CodeStyleProfiler {
 
     if (lang === 'python') {
       const absoluteImports = (allCode.match(/^import\s+\w/gm) ?? []).length;
-      const fromImports = (allCode.match(/^from\s+\w/gm) ?? []).length;
+      const _fromImports = (allCode.match(/^from\s+\w/gm) ?? []).length;
       const relativeImports = (allCode.match(/^from\s+\./gm) ?? []).length;
 
       const barrelExports = paths.some(p => p.endsWith('__init__.py'));

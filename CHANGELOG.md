@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-03-14
+
+### Added
+
+- **React/Ink CLI**: Migrated CLI from Commander.js to React with Ink for rich terminal UI
+- **Pastel Framework**: Adopted Pastel for command routing with Zod-based argument validation
+- **Interactive Wizard**: `cdm start` now launches an interactive wizard when no arguments provided
+- **Cost Estimation**: New `--estimate` flag on `cdm start` shows predicted tokens, cost, and time
+- **Shell Completions**: New `cdm completion <shell>` command generates bash/zsh/fish autocompletion scripts
+- **Dashboard Command**: New `cdm dashboard` displays project overview with stats, artifacts, and issues
+- **Streaming Output**: Real-time display of agent activity, file changes, and test results during pipeline execution
+- **Enhanced Error Display**: Contextual error messages with actionable suggestions and recovery commands
+
+### Changed
+
+- **Dependencies**: Updated React to v19, Zod to v4, added Ink v6 and Pastel v4
+- **Build System**: Added Bun configuration (`bunfig.toml`) as alternative to tsc
+- **Component Architecture**: CLI now uses React hooks (`useProject`, `useConfig`, `usePipeline`, `useArtifacts`, `useDashboardData`)
+
+### Fixed
+
+- All 29 ESLint warnings resolved (unused variables, imports, and type import consistency)
+- Zod v4 API compatibility (`error.issues` instead of `error.errors`)
+- Pastel v4 API compatibility (Zod schemas for options/args instead of helper functions)
+
 ## [2.0.0] - 2026-03-14
 
 ### Breaking Changes

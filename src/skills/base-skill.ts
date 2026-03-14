@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   type Skill,
   type SkillCategory,
-  type SkillProjectFilter,
   type AgentRole,
   type ArtifactType,
   type ProjectConfig,
@@ -53,7 +52,7 @@ export class SkillRegistry {
   registerSkill(skill: Skill): void {
     const result = SkillSchema.safeParse(skill);
     if (!result.success) {
-      const errors = result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+      const errors = result.error.issues.map((e) => `${String(e.path.join('.'))}: ${e.message}`);
       throw new Error(`Invalid skill "${skill.id}": ${errors.join(', ')}`);
     }
     this.skills.set(skill.id, skill);

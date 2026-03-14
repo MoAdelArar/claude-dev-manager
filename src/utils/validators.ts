@@ -2,7 +2,6 @@ import {
   type Artifact,
   ArtifactType,
   AgentRole,
-  type Feature,
   type StepResult,
   type HandoffPayload,
   type Issue,

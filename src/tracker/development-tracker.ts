@@ -9,7 +9,7 @@ import {
   type AgentResult,
   type Feature,
   TrackingEventType,
-  AgentRole,
+  type AgentRole,
 } from '../types';
 import logger from '../utils/logger';
 

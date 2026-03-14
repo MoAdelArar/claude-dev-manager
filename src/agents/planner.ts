@@ -134,7 +134,7 @@ export class PlannerAgent extends BaseAgent {
     return artifacts;
   }
 
-  protected async identifyIssues(task: AgentTask, output: string): Promise<Issue[]> {
+  protected async identifyIssues(_task: AgentTask, _output: string): Promise<Issue[]> {
     return [];
   }
 
@@ -166,7 +166,7 @@ export class PlannerAgent extends BaseAgent {
   generateExecutionPlan(
     taskType: string,
     description: string,
-    featureId: string,
+    _featureId: string,
   ): ExecutionPlan {
     const steps = this.getStepsForTaskType(taskType, description);
 

@@ -7,6 +7,7 @@ import {
   type AgentTask,
   type AgentResult,
   type Artifact,
+  type AgentConfig,
   ArtifactType,
   ArtifactStatus,
   ReviewStatus,
@@ -381,7 +382,7 @@ export class ClaudeCodeBridge {
   }
 
   private buildAgentInstructionFile(
-    config: import('../types').AgentConfig,
+    config: AgentConfig,
     snapshot?: ProjectSnapshot,
   ): string {
     const sections: string[] = [];
@@ -419,7 +420,7 @@ export class ClaudeCodeBridge {
   }
 
   private buildProjectContextSection(
-    role: import('../types').AgentRole,
+    role: AgentRole,
     s: ProjectSnapshot,
   ): string {
     const lines: string[] = ['## Project Context\n'];

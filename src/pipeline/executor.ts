@@ -8,7 +8,6 @@ import {
   StepStatus,
   type Feature,
   type Artifact,
-  type Issue,
   type AgentTask,
   AgentStatus,
   MessagePriority,
@@ -190,7 +189,7 @@ export class PipelineExecutor {
 
     pipelineLog(`Executing step ${step.index}: ${step.agent} [${step.skills.join(', ')}]`);
 
-    const agent = this.agentRegistry.getAgent(step.agent, step.skills);
+    const _agent = this.agentRegistry.getAgent(step.agent, step.skills);
 
     const inputArtifacts = this.gatherInputArtifacts(step, previousArtifacts);
 
@@ -329,7 +328,7 @@ export class PipelineExecutor {
     return true;
   }
 
-  private createFailedStepResult(step: ExecutionStep, error: Error): StepResult {
+  private createFailedStepResult(step: ExecutionStep, _error: Error): StepResult {
     return {
       stepIndex: step.index,
       agent: step.agent,

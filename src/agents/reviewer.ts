@@ -243,7 +243,7 @@ No critical issues found.
 `;
   }
 
-  private generateSecurityReport(task: AgentTask, sourceCode: Artifact[]): string {
+  private generateSecurityReport(task: AgentTask, _sourceCode: Artifact[]): string {
     return `# Security Audit Report
 
 ## Overview
@@ -277,7 +277,7 @@ No critical vulnerabilities found.
 `;
   }
 
-  private generatePerformanceReport(task: AgentTask, sourceCode: Artifact[]): string {
+  private generatePerformanceReport(task: AgentTask, _sourceCode: Artifact[]): string {
     return `# Performance Analysis Report
 
 ## Overview
@@ -310,7 +310,7 @@ None identified in current implementation.
 `;
   }
 
-  private generateAccessibilityReport(task: AgentTask, sourceCode: Artifact[]): string {
+  private generateAccessibilityReport(task: AgentTask, _sourceCode: Artifact[]): string {
     return `# Accessibility Audit Report
 
 ## Overview
