@@ -1,29 +1,44 @@
-import { execSync } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-
-jest.mock('node:child_process');
-jest.mock('node:fs');
-jest.mock('node:os');
-
-const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
-const mockFs = fs as jest.Mocked<typeof fs>;
-const mockOs = os as jest.Mocked<typeof os>;
-
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import type { Mock } from 'bun:test';
 import {
   isRtkInstalled,
   isRtkHookActive,
   ensureRtkInitialized,
   getRtkGain,
   clearRtkCache,
-} from '../../src/utils/rtk';
+} from '@utils/rtk';
+
+type ExecSyncFn = (cmd: string, opts?: object) => Buffer;
+type ExistsSyncFn = (path: string) => boolean;
+type ReadFileSyncFn = (path: string, encoding?: string) => string;
+type HomedirFn = () => string;
+
+const mockExecSync: Mock<ExecSyncFn> = mock((cmd: string, _opts?: object) => Buffer.from('rtk 0.29.0'));
+const mockExistsSync: Mock<ExistsSyncFn> = mock((_path: string) => true);
+const mockReadFileSync: Mock<ReadFileSyncFn> = mock((_path: string, _encoding?: string) => '{}');
+const mockHomedir: Mock<HomedirFn> = mock(() => '/home/testuser');
+
+mock.module('node:child_process', () => ({
+  execSync: mockExecSync,
+}));
+
+mock.module('node:fs', () => ({
+  existsSync: mockExistsSync,
+  readFileSync: mockReadFileSync,
+}));
+
+mock.module('node:os', () => ({
+  homedir: mockHomedir,
+}));
 
 describe('RTK Utility', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockExecSync.mockClear();
+    mockExistsSync.mockClear();
+    mockReadFileSync.mockClear();
+    mockHomedir.mockClear();
     clearRtkCache();
-    mockOs.homedir.mockReturnValue('/home/testuser');
+    mockHomedir.mockReturnValue('/home/testuser');
   });
 
   describe('isRtkInstalled', () => {
@@ -34,7 +49,7 @@ describe('RTK Utility', () => {
     });
 
     it('should return false when rtk binary is not found', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation((): Buffer => {
         throw new Error('command not found: rtk');
       });
       expect(isRtkInstalled()).toBe(false);
@@ -57,8 +72,8 @@ describe('RTK Utility', () => {
 
   describe('isRtkHookActive', () => {
     it('should return true when settings.json contains rtk PreToolUse hook', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify({
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify({
         hooks: {
           PreToolUse: ['rtk'],
         },
@@ -67,21 +82,21 @@ describe('RTK Utility', () => {
     });
 
     it('should return false when settings.json does not exist', () => {
-      mockFs.existsSync.mockReturnValue(false);
+      mockExistsSync.mockReturnValue(false);
       expect(isRtkHookActive()).toBe(false);
     });
 
     it('should return false when settings.json does not contain rtk hook', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify({
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(JSON.stringify({
         hooks: {},
       }));
       expect(isRtkHookActive()).toBe(false);
     });
 
     it('should return false and handle errors gracefully', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockImplementation(() => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockImplementation((): string => {
         throw new Error('Permission denied');
       });
       expect(isRtkHookActive()).toBe(false);
@@ -90,7 +105,7 @@ describe('RTK Utility', () => {
 
   describe('ensureRtkInitialized', () => {
     it('should return installed=false when rtk is not installed', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation((): Buffer => {
         throw new Error('command not found');
       });
 
@@ -104,8 +119,8 @@ describe('RTK Utility', () => {
 
     it('should return hookActive=true when rtk is installed and hook is already active', () => {
       mockExecSync.mockReturnValue(Buffer.from('rtk 0.29.0'));
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue('{"hooks": {"PreToolUse": ["rtk"]}}');
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('{"hooks": {"PreToolUse": ["rtk"]}}');
 
       const result = ensureRtkInitialized();
       expect(result).toEqual({
@@ -117,7 +132,7 @@ describe('RTK Utility', () => {
 
     it('should run rtk init --global when installed but hook not active', () => {
       let callCount = 0;
-      mockExecSync.mockImplementation((cmd: string) => {
+      mockExecSync.mockImplementation((cmd: string): Buffer => {
         if (cmd === 'rtk --version') {
           return Buffer.from('rtk 0.29.0');
         }
@@ -127,11 +142,11 @@ describe('RTK Utility', () => {
         throw new Error('Unknown command');
       });
 
-      mockFs.existsSync.mockImplementation(() => {
+      mockExistsSync.mockImplementation((): boolean => {
         callCount++;
         return callCount > 1;
       });
-      mockFs.readFileSync.mockReturnValue('{"hooks": {"PreToolUse": ["rtk"]}}');
+      mockReadFileSync.mockReturnValue('{"hooks": {"PreToolUse": ["rtk"]}}');
 
       clearRtkCache();
       const result = ensureRtkInitialized();
@@ -142,7 +157,7 @@ describe('RTK Utility', () => {
 
   describe('getRtkGain', () => {
     it('should return null when rtk is not installed', () => {
-      mockExecSync.mockImplementation(() => {
+      mockExecSync.mockImplementation((): Buffer => {
         throw new Error('command not found');
       });
 
@@ -150,7 +165,7 @@ describe('RTK Utility', () => {
     });
 
     it('should parse rtk gain output correctly', () => {
-      mockExecSync.mockImplementation((cmd: string) => {
+      mockExecSync.mockImplementation((cmd: string): Buffer => {
         if (cmd === 'rtk --version') {
           return Buffer.from('rtk 0.29.0');
         }
@@ -175,7 +190,7 @@ Tokens saved: 10.3M (89.2%)`);
     });
 
     it('should handle K suffix in token counts', () => {
-      mockExecSync.mockImplementation((cmd: string) => {
+      mockExecSync.mockImplementation((cmd: string): Buffer => {
         if (cmd === 'rtk --version') {
           return Buffer.from('rtk 0.29.0');
         }
@@ -196,7 +211,7 @@ Tokens saved: 500K (75%)`);
     });
 
     it('should return null when gain output cannot be parsed', () => {
-      mockExecSync.mockImplementation((cmd: string) => {
+      mockExecSync.mockImplementation((cmd: string): Buffer => {
         if (cmd === 'rtk --version') {
           return Buffer.from('rtk 0.29.0');
         }
@@ -211,7 +226,7 @@ Tokens saved: 500K (75%)`);
     });
 
     it('should return null when rtk gain command fails', () => {
-      mockExecSync.mockImplementation((cmd: string) => {
+      mockExecSync.mockImplementation((cmd: string): Buffer => {
         if (cmd === 'rtk --version') {
           return Buffer.from('rtk 0.29.0');
         }
