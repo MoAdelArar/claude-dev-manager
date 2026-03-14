@@ -1,19 +1,4 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from 'bun:test';
-
-const mockGetProject = jest.fn();
-const mockGetAllFeatures = jest.fn();
-const mockLoadConfig = jest.fn();
-
-jest.mock('../../../../src/orchestrator/context.js', () => ({
-  ProjectContext: jest.fn().mockImplementation(() => ({
-    getProject: mockGetProject,
-    getAllFeatures: mockGetAllFeatures,
-  })),
-}));
-
-jest.mock('../../../../src/utils/config.js', () => ({
-  loadConfig: mockLoadConfig,
-}));
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 
 describe('useProject', () => {
   const mockProject = {
@@ -35,7 +20,7 @@ describe('useProject', () => {
       branchStrategy: 'main',
       customInstructions: '',
     },
-    features: [],
+    features: [] as unknown[],
   };
 
   const mockFeatures = [
@@ -58,15 +43,14 @@ describe('useProject', () => {
     agents: {},
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetProject.mockReturnValue(mockProject);
-    mockGetAllFeatures.mockReturnValue(mockFeatures);
-    mockLoadConfig.mockReturnValue(mockConfig);
-  });
+  const mockGetProject = mock(() => mockProject);
+  const mockGetAllFeatures = mock(() => mockFeatures);
+  const mockLoadConfig = mock((_path: string) => mockConfig);
 
-  afterEach(() => {
-    jest.restoreAllMocks();
+  beforeEach(() => {
+    mockGetProject.mockClear();
+    mockGetAllFeatures.mockClear();
+    mockLoadConfig.mockClear();
   });
 
   it('should return project data', () => {
@@ -87,15 +71,15 @@ describe('useProject', () => {
   });
 
   it('should handle errors gracefully', () => {
-    mockGetProject.mockImplementation(() => {
+    const errorMock = mock(() => {
       throw new Error('Project not found');
     });
-    expect(() => mockGetProject()).toThrow('Project not found');
+    expect(() => errorMock()).toThrow('Project not found');
   });
 
   it('should handle empty features list', () => {
-    mockGetAllFeatures.mockReturnValue([]);
-    const features = mockGetAllFeatures();
+    const emptyFeaturesMock = mock(() => [] as unknown[]);
+    const features = emptyFeaturesMock();
     expect(features).toHaveLength(0);
   });
 });

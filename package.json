@@ -32,6 +32,7 @@
     "mcp": "node dist/mcp-server.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --project tsconfig.test.json --noEmit",
     "pretest": "bun run typecheck",
     "prepublishOnly": "bun run lint && bun test && bun run build"
   },
