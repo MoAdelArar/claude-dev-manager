@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageBus } from '../../src/communication/message-bus';
 import {

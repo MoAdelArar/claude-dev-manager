@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { execSync, type ExecSyncOptions } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

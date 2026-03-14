@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { SkillRegistry } from '../../src/skills/base-skill';
 import { loadBuiltInSkills, BUILT_IN_SKILLS } from '../../src/skills/index';
 import { AgentRole, type Skill, SkillCategory, ArtifactType } from '../../src/types';

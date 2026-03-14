@@ -1,10 +1,10 @@
+import { describe, it, expect } from 'bun:test';
 import {
   validateArtifact,
   validateHandoff,
   validateFeatureDescription,
   areRequiredArtifactsPresent,
   hasBlockingIssues,
-  ValidationError,
 } from '../../src/utils/validators';
 import {
   Artifact,
