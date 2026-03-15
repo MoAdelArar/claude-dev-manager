@@ -61,11 +61,7 @@ export default function ShowCommand({ args, options }: Props): React.ReactElemen
   
   if (feature) {
     if (options.json) {
-      const jsonFeature = {
-        ...feature,
-        stepResults: Object.fromEntries(feature.stepResults),
-      };
-      console.log(JSON.stringify(jsonFeature, null, 2));
+      console.log(JSON.stringify(feature, null, 2));
       return <></>;
     }
 
@@ -79,6 +75,19 @@ export default function ShowCommand({ args, options }: Props): React.ReactElemen
           <Text>Step:     {feature.currentStep}</Text>
           <Text>Priority: {feature.priority}</Text>
           <Text>Created:  {formatDate(feature.createdAt)}</Text>
+          {feature.personas && (
+            <>
+              <Text> </Text>
+              <Text bold>Personas:</Text>
+              <Text>  Primary:    <Text color={colors.info}>{feature.personas.primary}</Text></Text>
+              {feature.personas.supporting.length > 0 && (
+                <Text>  Supporting: {feature.personas.supporting.join(', ')}</Text>
+              )}
+              {feature.personas.reviewLens.length > 0 && (
+                <Text>  Review:     {feature.personas.reviewLens.join(', ')}</Text>
+              )}
+            </>
+          )}
         </Box>
 
         {feature.artifacts.length > 0 && (
@@ -102,23 +111,6 @@ export default function ShowCommand({ args, options }: Props): React.ReactElemen
                 <Text> {i.title}</Text>
               </Box>
             ))}
-          </>
-        )}
-
-        {feature.stepResults.size > 0 && (
-          <>
-            <Text> </Text>
-            <Text bold>  Step History:</Text>
-            {Array.from(feature.stepResults.entries()).map(([stepIndex, result]) => {
-              const statusIcon = result.status === 'completed' ? '✓' : result.status === 'failed' ? '✗' : '~';
-              const statusColor = result.status === 'completed' ? colors.success : result.status === 'failed' ? colors.error : colors.warning;
-              return (
-                <Box key={stepIndex}>
-                  <Text color={statusColor}>    {statusIcon}</Text>
-                  <Text> Step {stepIndex}: {result.skills.join(', ')} — {result.status} ({result.artifacts.length} artifacts, {result.issues.length} issues)</Text>
-                </Box>
-              );
-            })}
           </>
         )}
       </Box>

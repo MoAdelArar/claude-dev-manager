@@ -1,25 +1,21 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { colors } from '../utils/colors.js';
-import { getErrorSuggestion, getErrorSuggestionForStep, type EnhancedErrorInfo } from '../../utils/error-suggestions.js';
-import { formatAgentName } from '../utils/format.js';
-import type { AgentRole } from '../../types.js';
+import { getErrorSuggestion, getErrorSuggestionForPersona, type EnhancedErrorInfo } from '../../utils/error-suggestions.js';
 
 interface EnhancedErrorDisplayProps {
   error: Error | string;
-  step?: number;
-  agent?: AgentRole;
+  personaId?: string;
   showDetails?: boolean;
 }
 
 export function EnhancedErrorDisplay({
   error,
-  step,
-  agent,
+  personaId,
   showDetails = false,
 }: EnhancedErrorDisplayProps): React.ReactElement {
-  const errorInfo: EnhancedErrorInfo = step !== undefined
-    ? getErrorSuggestionForStep(error, step, agent)
+  const errorInfo: EnhancedErrorInfo = personaId
+    ? getErrorSuggestionForPersona(error, personaId)
     : getErrorSuggestion(error);
 
   return (
@@ -28,17 +24,9 @@ export function EnhancedErrorDisplay({
         <Text bold color={colors.error}>❌ {errorInfo.title}</Text>
       </Box>
 
-      {(errorInfo.step !== undefined || errorInfo.agent) && (
+      {errorInfo.personaId && (
         <Box marginBottom={1} marginLeft={2}>
-          {errorInfo.step !== undefined && (
-            <Text color={colors.muted}>Step {errorInfo.step}</Text>
-          )}
-          {errorInfo.agent && (
-            <Text color={colors.muted}>
-              {errorInfo.step !== undefined && ' | '}
-              Agent: {formatAgentName(errorInfo.agent)}
-            </Text>
-          )}
+          <Text color={colors.muted}>Persona: {errorInfo.personaId}</Text>
         </Box>
       )}
 

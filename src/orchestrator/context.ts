@@ -8,8 +8,9 @@ import {
   type Feature,
   FeatureStatus,
   FeaturePriority,
-  type StepResult,
   CloudProvider,
+  type Artifact,
+  type Issue,
 } from '../types';
 import logger from '../utils/logger';
 
@@ -65,7 +66,6 @@ export class ProjectContext {
       createdAt: new Date(),
       updatedAt: new Date(),
       currentStep: 'pending',
-      stepResults: new Map(),
       artifacts: [],
       issues: [],
       status: FeatureStatus.DRAFT,
@@ -116,12 +116,19 @@ export class ProjectContext {
     }
   }
 
-  recordStepResult(featureId: string, result: StepResult): void {
+  addArtifacts(featureId: string, artifacts: Artifact[]): void {
     const feature = this.features.get(featureId);
     if (feature) {
-      feature.stepResults.set(result.stepIndex, result);
-      feature.artifacts.push(...result.artifacts);
-      feature.issues.push(...result.issues);
+      feature.artifacts.push(...artifacts);
+      feature.updatedAt = new Date();
+      this.saveFeature(feature);
+    }
+  }
+
+  addIssues(featureId: string, issues: Issue[]): void {
+    const feature = this.features.get(featureId);
+    if (feature) {
+      feature.issues.push(...issues);
       feature.updatedAt = new Date();
       this.saveFeature(feature);
     }
@@ -683,11 +690,7 @@ export class ProjectContext {
 
   private saveFeature(feature: Feature): void {
     const filePath = path.join(this.stateDir, 'features', `${feature.id}.json`);
-    const serializable = {
-      ...feature,
-      stepResults: Object.fromEntries(feature.stepResults),
-    };
-    fs.writeFileSync(filePath, JSON.stringify(serializable, null, 2), 'utf-8');
+    fs.writeFileSync(filePath, JSON.stringify(feature, null, 2), 'utf-8');
   }
 
   private loadFeatures(): void {
@@ -702,18 +705,6 @@ export class ProjectContext {
         const data = JSON.parse(content);
         data.createdAt = new Date(data.createdAt);
         data.updatedAt = new Date(data.updatedAt);
-        data.stepResults = new Map(
-          Object.entries(data.stepResults ?? {}).map(([k, v]) => {
-            const sr = v as Record<string, unknown>;
-            if (sr.startedAt && typeof sr.startedAt === 'string') {
-              sr.startedAt = new Date(sr.startedAt);
-            }
-            if (sr.completedAt && typeof sr.completedAt === 'string') {
-              sr.completedAt = new Date(sr.completedAt);
-            }
-            return [Number(k), sr];
-          }),
-        );
         const feature = data as Feature;
         this.features.set(feature.id, feature);
         this.project.features.push(feature);

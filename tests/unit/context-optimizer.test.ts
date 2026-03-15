@@ -4,17 +4,14 @@ import {
   ArtifactType,
   ArtifactStatus,
   ReviewStatus,
-  AgentRole,
 } from '../../src/types';
 import {
   summarizeArtifact,
   summarizeArtifacts,
-  optimizeAnalysisForRole,
-  optimizeProfileForRole,
-  shouldPassFullArtifacts,
-  optimizeInputArtifacts,
+  extractSections,
   estimateTokens,
-  buildTokenReport,
+  truncateContent,
+  formatArtifactContext,
 } from '../../src/context/context-optimizer';
 
 function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
@@ -24,7 +21,7 @@ function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
     name: 'Requirements',
     description: 'Test artifact',
     filePath: 'requirements.md',
-    createdBy: AgentRole.PLANNER,
+    createdBy: 'software-engineer',
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -69,22 +66,6 @@ This is the overview section for the project requirements.
 ## Compliance
 - GDPR compliant
 - SOC2 Type II certified`;
-
-const FULL_ANALYSIS = `# Codebase Analysis
-## Entry Points
-- src/index.ts
-- src/cli.ts
-## Dependencies
-- express: 4.18.0
-- pg: 8.11.0
-## Patterns
-- Repository pattern for data access
-- Middleware pattern for request handling
-## Testing
-- tests/unit — Unit tests
-- tests/integration — Integration tests
-## Module Dependencies
-api → services → db`;
 
 const FULL_PROFILE = `# Code Style Profile
 ## Architecture
@@ -197,172 +178,35 @@ describe('summarizeArtifacts()', () => {
   });
 });
 
-describe('optimizeAnalysisForRole()', () => {
-  it('should return null for null input', () => {
-    expect(optimizeAnalysisForRole(null, AgentRole.PLANNER)).toBeNull();
+describe('extractSections()', () => {
+  it('should return empty string for empty markdown', () => {
+    expect(extractSections('', ['Overview'])).toBe('');
   });
 
-  it('should return filtered sections for PLANNER (Entry Points only)', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.PLANNER);
-    expect(result).not.toBeNull();
-    expect(result).toContain('Entry Points');
+  it('should return empty string for empty section names', () => {
+    expect(extractSections(FULL_PROFILE, [])).toBe('');
   });
 
-  it('should return Patterns and Module Dependencies for DEVELOPER', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.DEVELOPER);
-    expect(result).not.toBeNull();
-    expect(result).toContain('Patterns');
-    expect(result).toContain('Module Dependencies');
-  });
-
-  it('should return Dependencies and Entry Points for OPERATOR', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, AgentRole.OPERATOR);
-    expect(result).not.toBeNull();
-    expect(result).toContain('Dependencies');
-    expect(result).toContain('Entry Points');
-  });
-
-  it('should return full analysis for unknown role', () => {
-    const result = optimizeAnalysisForRole(FULL_ANALYSIS, 'unknown_role' as AgentRole);
-    expect(result).toBe(FULL_ANALYSIS);
-  });
-
-  it('should return null when filtered analysis is completely empty', () => {
-    const analysis = 'Just a raw line with no headings at all.';
-    const result = optimizeAnalysisForRole(analysis, AgentRole.PLANNER);
-    expect(result).toBeNull();
-  });
-
-  it('should return null for empty string analysis', () => {
-    const result = optimizeAnalysisForRole('', AgentRole.PLANNER);
-    expect(result).toBeNull();
-  });
-});
-
-describe('optimizeProfileForRole()', () => {
-  it('should return null for null input', () => {
-    expect(optimizeProfileForRole(null, AgentRole.PLANNER)).toBeNull();
-  });
-
-  it('should return architecture only for PLANNER', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.PLANNER);
-    expect(result).not.toBeNull();
+  it('should extract matching sections', () => {
+    const result = extractSections(FULL_PROFILE, ['Architecture', 'Naming Conventions']);
     expect(result).toContain('Architecture');
-  });
-
-  it('should return full code style for DEVELOPER', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.DEVELOPER);
-    expect(result).not.toBeNull();
     expect(result).toContain('Naming Conventions');
-    expect(result).toContain('Import Style');
-    expect(result).toContain('Formatting');
-    expect(result).toContain('TypeScript Usage');
-    expect(result).toContain('Error Handling');
-    expect(result).toContain('Code Samples');
+    expect(result).toContain('# Code Style Profile');
   });
 
-  it('should return testing sections for REVIEWER', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, AgentRole.REVIEWER);
-    expect(result).not.toBeNull();
-    expect(result).toContain('Testing Conventions');
-    expect(result).toContain('Naming Conventions');
+  it('should preserve title line', () => {
+    const result = extractSections(FULL_PROFILE, ['Architecture']);
+    expect(result.startsWith('# Code Style Profile')).toBe(true);
   });
 
-  it('should return full profile for unknown role', () => {
-    const result = optimizeProfileForRole(FULL_PROFILE, 'unknown_role' as AgentRole);
-    expect(result).toBe(FULL_PROFILE);
+  it('should handle case-insensitive section matching', () => {
+    const result = extractSections(FULL_PROFILE, ['architecture']);
+    expect(result).toContain('## Architecture');
   });
 
-  it('should return null when filtered content is completely empty', () => {
-    const profileWithNoTitle = 'Just a line without headings.';
-    const result = optimizeProfileForRole(profileWithNoTitle, AgentRole.REVIEWER);
-    expect(result).toBeNull();
-  });
-
-  it('should return the title line even when no matching subsections found', () => {
-    const minimalProfile = '# Code Style\nSome intro text only.';
-    const result = optimizeProfileForRole(minimalProfile, AgentRole.REVIEWER);
-    expect(result).toBe('# Code Style');
-  });
-});
-
-describe('shouldPassFullArtifacts()', () => {
-  it('should return true for DEVELOPER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.DEVELOPER)).toBe(true);
-  });
-
-  it('should return true for REVIEWER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.REVIEWER)).toBe(true);
-  });
-
-  it('should return false for PLANNER', () => {
-    expect(shouldPassFullArtifacts(AgentRole.PLANNER)).toBe(false);
-  });
-
-  it('should return false for OPERATOR', () => {
-    expect(shouldPassFullArtifacts(AgentRole.OPERATOR)).toBe(false);
-  });
-
-  it('should return false for ARCHITECT', () => {
-    expect(shouldPassFullArtifacts(AgentRole.ARCHITECT)).toBe(false);
-  });
-
-  it('should return false for an unknown role', () => {
-    expect(shouldPassFullArtifacts('unknown' as AgentRole)).toBe(false);
-  });
-});
-
-describe('optimizeInputArtifacts()', () => {
-  it('should return empty string for empty artifact array', () => {
-    expect(optimizeInputArtifacts([], AgentRole.DEVELOPER)).toBe('');
-  });
-
-  it('should summarize artifacts for non-full-artifact roles', () => {
-    const artifact = makeArtifact({ content: LONG_CONTENT, name: 'Requirements Doc', version: 1 });
-    const result = optimizeInputArtifacts([artifact], AgentRole.PLANNER);
-
-    expect(result).toContain('Requirements Doc');
-    expect(result).toContain('lines total');
-  });
-
-  it('should pass full content for developer roles when under 8KB', () => {
-    const artifact = makeArtifact({ content: 'Small content', name: 'Tiny' });
-    const result = optimizeInputArtifacts([artifact], AgentRole.DEVELOPER);
-
-    expect(result).toContain('### Tiny');
-    expect(result).toContain('Small content');
-    expect(result).toContain('```');
-  });
-
-  it('should summarize even for developer roles when content exceeds 8KB', () => {
-    const lines = Array.from({ length: 300 }, (_, i) => `Line ${i}: ${'x'.repeat(30)}`);
-    const bigContent = lines.join('\n');
-    expect(bigContent.length).toBeGreaterThan(8000);
-
-    const artifact = makeArtifact({ content: bigContent, name: 'Large Doc' });
-    const result = optimizeInputArtifacts([artifact], AgentRole.DEVELOPER);
-
-    expect(result).toContain('lines total');
-  });
-
-  it('should handle artifacts with undefined content for developer roles', () => {
-    const artifact = makeArtifact({
-      content: undefined as unknown as string,
-      name: 'Empty',
-    });
-    const result = optimizeInputArtifacts([artifact], AgentRole.DEVELOPER);
-    expect(result).toContain('### Empty');
-  });
-
-  it('should handle multiple artifacts for developer roles under 8KB', () => {
-    const a1 = makeArtifact({ content: 'Content A', name: 'Doc A' });
-    const a2 = makeArtifact({ content: 'Content B', name: 'Doc B' });
-    const result = optimizeInputArtifacts([a1, a2], AgentRole.REVIEWER);
-
-    expect(result).toContain('### Doc A');
-    expect(result).toContain('### Doc B');
-    expect(result).toContain('Content A');
-    expect(result).toContain('Content B');
+  it('should handle partial section name matching', () => {
+    const result = extractSections(FULL_PROFILE, ['Naming']);
+    expect(result).toContain('## Naming Conventions');
   });
 });
 
@@ -382,90 +226,74 @@ describe('estimateTokens()', () => {
   });
 });
 
-describe('buildTokenReport()', () => {
-  it('should return all required fields', () => {
-    const report = buildTokenReport(
-      'system prompt here',
-      'task instructions',
-      'analysis text',
-      'profile text',
-      'artifact context',
-      'output format',
-      'full analysis that is much longer than the filtered version',
-      'full profile that is also much longer than the filtered version',
-      'full artifact content that is the longest of all',
-    );
-
-    expect(report).toHaveProperty('systemPrompt');
-    expect(report).toHaveProperty('taskInstructions');
-    expect(report).toHaveProperty('analysis');
-    expect(report).toHaveProperty('profile');
-    expect(report).toHaveProperty('artifacts');
-    expect(report).toHaveProperty('outputFormat');
-    expect(report).toHaveProperty('total');
-    expect(report).toHaveProperty('savedVsFull');
-    expect(report).toHaveProperty('savingsPercent');
+describe('truncateContent()', () => {
+  it('should return full content when under maxChars', () => {
+    const content = 'Short content here';
+    const result = truncateContent(content, 100);
+    expect(result).toBe(content);
   });
 
-  it('should calculate total as sum of components', () => {
-    const report = buildTokenReport(
-      'aaaa', // 1 token
-      'bbbb', // 1 token
-      'cccc', // 1 token
-      'dddd', // 1 token
-      'eeee', // 1 token
-      'ffff', // 1 token
-      'cccc',
-      'dddd',
-      'eeee',
-    );
-
-    expect(report.total).toBe(
-      report.systemPrompt + report.taskInstructions + report.analysis +
-      report.profile + report.artifacts + report.outputFormat,
-    );
+  it('should truncate content when over maxChars', () => {
+    const content = 'x'.repeat(200);
+    const result = truncateContent(content, 100);
+    expect(result.length).toBeLessThan(content.length);
+    expect(result).toContain('(truncated)');
   });
 
-  it('should calculate savings correctly', () => {
-    const report = buildTokenReport(
-      'sp',
-      'ti',
-      'short',
-      'short',
-      'short',
-      'of',
-      'this is a much longer full analysis text with many more tokens',
-      'this is a much longer full profile text with many more tokens',
-      'this is a much longer full artifact content with many more tokens',
-    );
-
-    expect(report.savedVsFull).toBeGreaterThan(0);
-    expect(report.savingsPercent).toBeGreaterThan(0);
-    expect(report.savingsPercent).toBeLessThanOrEqual(100);
+  it('should try to truncate at last newline for cleaner output', () => {
+    const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
+    const result = truncateContent(content, 25);
+    expect(result).toContain('(truncated)');
   });
 
-  it('should handle null analysis and profile', () => {
-    const report = buildTokenReport(
-      'system',
-      'task',
-      null,
-      null,
-      'artifacts',
-      'format',
-      null,
-      null,
-      'full artifacts',
-    );
+  it('should handle content with no newlines', () => {
+    const content = 'x'.repeat(200);
+    const result = truncateContent(content, 100);
+    expect(result).toContain('(truncated)');
+  });
+});
 
-    expect(report.analysis).toBe(0);
-    expect(report.profile).toBe(0);
-    expect(report.total).toBe(
-      report.systemPrompt + report.taskInstructions + report.artifacts + report.outputFormat,
-    );
+describe('formatArtifactContext()', () => {
+  it('should return empty string for empty artifacts array', () => {
+    expect(formatArtifactContext([])).toBe('');
   });
 
-  it('should return 0% savings when fullTotal is 0', () => {
-    const report = buildTokenReport('', '', '', '', '', '', '', '', '');
-    expect(report.savingsPercent).toBe(0);
+  it('should return full content when under maxTotalChars', () => {
+    const artifact = makeArtifact({ content: 'Small content', name: 'Tiny' });
+    const result = formatArtifactContext([artifact], 8000);
+
+    expect(result).toContain('### Tiny');
+    expect(result).toContain('Small content');
+    expect(result).toContain('```');
+  });
+
+  it('should summarize when over maxTotalChars', () => {
+    const lines = Array.from({ length: 300 }, (_, i) => `Line ${i}: ${'x'.repeat(30)}`);
+    const bigContent = lines.join('\n');
+
+    const artifact = makeArtifact({ content: bigContent, name: 'Large Doc' });
+    const result = formatArtifactContext([artifact], 1000);
+
+    expect(result).toContain('lines total');
+  });
+
+  it('should handle multiple small artifacts', () => {
+    const a1 = makeArtifact({ content: 'Content A', name: 'Doc A' });
+    const a2 = makeArtifact({ content: 'Content B', name: 'Doc B' });
+    const result = formatArtifactContext([a1, a2], 8000);
+
+    expect(result).toContain('### Doc A');
+    expect(result).toContain('### Doc B');
+    expect(result).toContain('Content A');
+    expect(result).toContain('Content B');
+  });
+
+  it('should handle artifacts with undefined content', () => {
+    const artifact = makeArtifact({
+      content: undefined as unknown as string,
+      name: 'Empty',
+    });
+    const result = formatArtifactContext([artifact], 8000);
+    expect(result).toContain('### Empty');
   });
 });

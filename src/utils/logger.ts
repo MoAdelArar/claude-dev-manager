@@ -1,24 +1,39 @@
+/**
+ * Logger for CDM with persona-based logging support.
+ */
+
 import winston from 'winston';
 import chalk from 'chalk';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { AgentRole } from '../types';
 
-const AGENT_COLORS: Record<AgentRole, (text: string) => string> = {
-  [AgentRole.PLANNER]: chalk.magenta,
-  [AgentRole.ARCHITECT]: chalk.cyan,
-  [AgentRole.DEVELOPER]: chalk.green,
-  [AgentRole.REVIEWER]: chalk.yellow,
-  [AgentRole.OPERATOR]: chalk.blue,
-};
+const PERSONA_COLORS = [
+  chalk.magenta,
+  chalk.cyan,
+  chalk.green,
+  chalk.yellow,
+  chalk.blue,
+  chalk.red,
+  chalk.white,
+];
 
-const customFormat = winston.format.printf(({ level, message, timestamp, agent, step }) => {
+function getPersonaColor(personaId: string): (text: string) => string {
+  let hash = 0;
+  for (let i = 0; i < personaId.length; i++) {
+    hash = (hash << 5) - hash + personaId.charCodeAt(i);
+    hash |= 0;
+  }
+  const idx = Math.abs(hash) % PERSONA_COLORS.length;
+  return PERSONA_COLORS[idx]!;
+}
+
+const customFormat = winston.format.printf(({ level, message, timestamp, persona, step }) => {
   const ts = chalk.gray(`[${timestamp}]`);
-  const agentTag = agent
-    ? AGENT_COLORS[agent as AgentRole]?.(`[${agent}]`) ?? `[${agent}]`
+  const personaTag = persona
+    ? getPersonaColor(persona as string)(`[${persona}]`)
     : '';
   const stepTag = step ? chalk.dim(`[${step}] `) : '';
-  return `${ts} ${level} ${stepTag}${agentTag} ${message}`;
+  return `${ts} ${level} ${stepTag}${personaTag} ${message}`;
 });
 
 const logger = winston.createLogger({
@@ -64,13 +79,13 @@ export function addFileTransport(projectPath: string): void {
   );
 }
 
-export function agentLog(
-  role: AgentRole,
+export function personaLog(
+  personaId: string,
   message: string,
   step?: string,
   level: string = 'info',
 ): void {
-  logger.log({ level, message, agent: role, step });
+  logger.log({ level, message, persona: personaId, step });
 }
 
 export function stepLog(
@@ -81,7 +96,7 @@ export function stepLog(
   logger.log({ level, message, step });
 }
 
-export function pipelineLog(message: string, level: string = 'info'): void {
+export function executionLog(message: string, level: string = 'info'): void {
   logger.log({ level, message: chalk.bold(message) });
 }
 

@@ -4,8 +4,7 @@ import { z } from 'zod';
 import { colors } from '../utils/colors.js';
 import { ProjectContext } from '../../orchestrator/context.js';
 import { DevelopmentTracker } from '../../tracker/development-tracker.js';
-import { formatAgentName, formatDuration, formatTokens, formatTime } from '../utils/format.js';
-import { AgentRole } from '../../types.js';
+import { formatDuration, formatTokens, formatTime } from '../utils/format.js';
 
 export const options = z.object({
   project: z.string().default(process.cwd()).describe('Project path'),
@@ -73,21 +72,21 @@ export default function HistoryCommand({ options }: Props): React.ReactElement {
           <Text color={colors.error}>{summary.failedFeatures}</Text>
           <Text> failed)</Text>
         </Box>
-        <Text>Steps run:    {summary.totalStepsExecuted}</Text>
+        <Text>Executions:   {summary.totalExecutions}</Text>
         <Text>Artifacts:    {summary.totalArtifactsProduced}</Text>
         <Text>Issues:       {summary.totalIssuesFound} found, {summary.totalIssuesResolved} resolved</Text>
         <Text>Tokens:       {formatTokens(summary.totalTokensUsed)}</Text>
         <Text>Duration:     {formatDuration(summary.totalDurationMs)}</Text>
       </Box>
 
-      {Object.keys(summary.agentActivity).length > 0 && (
+      {Object.keys(summary.personaUsage).length > 0 && (
         <>
           <Text> </Text>
-          <Text bold>Agent Activity:</Text>
+          <Text bold>Persona Usage:</Text>
           <Box marginLeft={2} flexDirection="column">
-            {Object.entries(summary.agentActivity).map(([role, data]) => (
-              <Text key={role}>
-                {formatAgentName(role as AgentRole)}: {data.tasks} tasks, {formatTokens(data.tokensUsed)} tokens, {formatDuration(data.durationMs)}
+            {Object.entries(summary.personaUsage).map(([personaId, data]) => (
+              <Text key={personaId}>
+                {personaId}: {data.executions} executions, {formatTokens(data.tokensUsed)} tokens, {formatDuration(data.durationMs)}
               </Text>
             ))}
           </Box>

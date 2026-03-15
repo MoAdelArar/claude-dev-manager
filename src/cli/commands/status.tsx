@@ -36,6 +36,7 @@ export default function StatusCommand({ options }: Props): React.ReactElement {
       createdAt: f.createdAt,
       artifactsCount: f.artifacts.length,
       issuesCount: f.issues.length,
+      personas: f.personas,
     }));
     console.log(JSON.stringify(jsonFeatures, null, 2));
     return <></>;
@@ -58,6 +59,9 @@ export default function StatusCommand({ options }: Props): React.ReactElement {
             <Text>Created: {formatDate(feature.createdAt)}</Text>
             <Text>Artifacts: {feature.artifacts.length}</Text>
             <Text>Issues: {feature.issues.length}</Text>
+            {feature.personas && (
+              <Text>Persona: <Text color={colors.info}>{feature.personas.primary}</Text></Text>
+            )}
           </Box>
         </Box>
       ))}
@@ -65,4 +69,4 @@ export default function StatusCommand({ options }: Props): React.ReactElement {
   );
 }
 
-export const description = 'Show the status of the current feature pipeline';
+export const description = 'Show the status of current features';

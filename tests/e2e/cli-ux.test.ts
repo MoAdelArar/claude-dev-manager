@@ -2,8 +2,6 @@ import { describe, it, expect } from 'bun:test';
 import { $ } from 'bun';
 
 describe('CLI UX Commands', () => {
-  const CLI_PATH = './dist/cli/index.js';
-
   describe('cdm completion', () => {
     it('shows help when no shell specified', async () => {
       const result = await $`bunx tsx src/cli/index.tsx completion`.quiet();
@@ -44,33 +42,20 @@ describe('CLI UX Commands', () => {
   });
 
   describe('cdm start --estimate', () => {
-    it('shows cost estimate for feature template', async () => {
-      const result = await $`bunx tsx src/cli/index.tsx start "Test feature" --estimate --template feature`.quiet();
+    it('shows cost estimate for task', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx start "Test feature" --estimate`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
-      expect(output).toContain('Pipeline Cost Estimate');
-      expect(output).toContain('Feature');
-      expect(output).toContain('Est. tokens');
-      expect(output).toContain('Est. cost');
-      expect(output).toContain('Est. time');
+      expect(output).toContain('Cost Estimate');
     });
 
-    it('shows cost estimate for quick-fix template', async () => {
-      const result = await $`bunx tsx src/cli/index.tsx start "Fix bug" --estimate --template quick-fix`.quiet();
+    it('shows persona information in estimate', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx start "Build React component" --estimate`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
-      expect(output).toContain('Quick Fix');
-      expect(output).toContain('2 steps');
-    });
-
-    it('auto-detects template from description', async () => {
-      const result = await $`bunx tsx src/cli/index.tsx start "Fix login bug" --estimate`.quiet();
-      const output = result.stdout.toString();
-
-      expect(result.exitCode).toBe(0);
-      expect(output).toContain('Quick Fix');
+      expect(output).toContain('Persona');
     });
   });
 
@@ -91,12 +76,54 @@ describe('CLI UX Commands', () => {
       expect(output).toContain('dashboard');
     });
 
+    it('shows personas command in help', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx --help`.quiet();
+      const output = result.stdout.toString();
+
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain('personas');
+    });
+
     it('shows estimate flag in start help', async () => {
       const result = await $`bunx tsx src/cli/index.tsx start --help`.quiet();
       const output = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
       expect(output).toContain('--estimate');
+    });
+
+    it('shows persona flag in start help', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx start --help`.quiet();
+      const output = result.stdout.toString();
+
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain('--persona');
+    });
+
+    it('shows review flag in start help', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx start --help`.quiet();
+      const output = result.stdout.toString();
+
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain('--review');
+    });
+  });
+
+  describe('cdm personas', () => {
+    it('shows personas list subcommand help', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx personas list --help`.quiet();
+      const output = result.stdout.toString();
+
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain('--division');
+    });
+
+    it('shows personas resolve subcommand help', async () => {
+      const result = await $`bunx tsx src/cli/index.tsx personas resolve --help`.quiet();
+      const output = result.stdout.toString();
+
+      expect(result.exitCode).toBe(0);
+      expect(output).toContain('description');
     });
   });
 });

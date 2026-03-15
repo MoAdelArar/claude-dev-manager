@@ -10,13 +10,15 @@ describe('useConfig', () => {
       ciProvider: 'github',
       deployTarget: 'npm',
     },
-    pipeline: {
+    execution: {
       maxRetries: 2,
-      timeoutMinutes: 30,
-      requireApprovals: false,
-      skipSteps: [] as string[],
+      timeoutMinutes: 120,
+      defaultMode: 'claude-cli',
     },
-    agents: {},
+    personas: {
+      divisions: ['engineering', 'testing', 'design'],
+      overrides: {},
+    },
   };
 
   const mockLoadConfig = mock((_path: string) => mockConfig);
@@ -53,13 +55,27 @@ describe('useConfig', () => {
   });
 
   it('should set nested value correctly', () => {
-    const obj: Record<string, unknown> = { pipeline: { maxRetries: 2 } };
-    const keys = 'pipeline.maxRetries'.split('.');
+    const obj: Record<string, unknown> = { execution: { maxRetries: 2 } };
+    const keys = 'execution.maxRetries'.split('.');
     let current: Record<string, unknown> = obj;
     for (let i = 0; i < keys.length - 1; i++) {
       current = current[keys[i]] as Record<string, unknown>;
     }
     current[keys[keys.length - 1]] = 5;
-    expect(obj.pipeline).toEqual({ maxRetries: 5 });
+    expect(obj.execution).toEqual({ maxRetries: 5 });
+  });
+
+  it('should have correct persona config structure', () => {
+    const config = mockLoadConfig('/test/path');
+    expect(config.personas).toBeDefined();
+    expect(config.personas.divisions).toBeDefined();
+    expect(Array.isArray(config.personas.divisions)).toBe(true);
+  });
+
+  it('should have correct execution config structure', () => {
+    const config = mockLoadConfig('/test/path');
+    expect(config.execution).toBeDefined();
+    expect(config.execution.maxRetries).toBe(2);
+    expect(config.execution.defaultMode).toBe('claude-cli');
   });
 });

@@ -4,11 +4,10 @@ import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import { colors } from '../utils/colors.js';
 
-type WizardStep = 'description' | 'template' | 'priority' | 'confirm';
+type WizardStep = 'description' | 'priority' | 'confirm';
 
 interface WizardResult {
   description: string;
-  template: string;
   priority: string;
 }
 
@@ -16,16 +15,6 @@ interface InteractiveWizardProps {
   onComplete: (result: WizardResult) => void;
   onCancel: () => void;
 }
-
-const TEMPLATES = [
-  { label: 'feature      - Standard feature development (4 steps)', value: 'feature' },
-  { label: 'full-feature - Feature with security and deployment (6 steps)', value: 'full-feature' },
-  { label: 'quick-fix    - For bugs, typos, and small tweaks (2 steps)', value: 'quick-fix' },
-  { label: 'review-only  - For audits and assessments (1 step)', value: 'review-only' },
-  { label: 'design-only  - Architecture spike or RFC (2 steps)', value: 'design-only' },
-  { label: 'deploy       - Deploy existing code (1 step)', value: 'deploy' },
-  { label: 'auto         - Let Planner agent decide based on task', value: 'auto' },
-];
 
 const PRIORITIES = [
   { label: 'low      - Can wait, no urgency', value: 'low' },
@@ -38,7 +27,6 @@ export function InteractiveWizard({ onComplete, onCancel }: InteractiveWizardPro
   const { exit } = useApp();
   const [step, setStep] = useState<WizardStep>('description');
   const [description, setDescription] = useState('');
-  const [template, setTemplate] = useState('feature');
   const [priority, setPriority] = useState('medium');
 
   useInput((input, key) => {
@@ -51,13 +39,8 @@ export function InteractiveWizard({ onComplete, onCancel }: InteractiveWizardPro
   const handleDescriptionSubmit = (value: string): void => {
     if (value.trim()) {
       setDescription(value.trim());
-      setStep('template');
+      setStep('priority');
     }
-  };
-
-  const handleTemplateSelect = (item: { value: string }): void => {
-    setTemplate(item.value);
-    setStep('priority');
   };
 
   const handlePrioritySelect = (item: { value: string }): void => {
@@ -67,7 +50,7 @@ export function InteractiveWizard({ onComplete, onCancel }: InteractiveWizardPro
 
   const handleConfirm = (item: { value: string }): void => {
     if (item.value === 'yes') {
-      onComplete({ description, template: template === 'auto' ? '' : template, priority });
+      onComplete({ description, priority });
     } else if (item.value === 'back') {
       setStep('priority');
     } else {
@@ -77,8 +60,8 @@ export function InteractiveWizard({ onComplete, onCancel }: InteractiveWizardPro
   };
 
   const renderStepIndicator = (): React.ReactElement => {
-    const steps = ['Description', 'Template', 'Priority', 'Confirm'];
-    const currentIndex = ['description', 'template', 'priority', 'confirm'].indexOf(step);
+    const steps = ['Description', 'Priority', 'Confirm'];
+    const currentIndex = ['description', 'priority', 'confirm'].indexOf(step);
     
     return (
       <Box marginBottom={1}>
@@ -123,14 +106,8 @@ export function InteractiveWizard({ onComplete, onCancel }: InteractiveWizardPro
           <Box marginTop={1}>
             <Text color={colors.muted}>Press Enter to continue, Esc to cancel</Text>
           </Box>
-        </Box>
-      )}
-
-      {step === 'template' && (
-        <Box flexDirection="column">
-          <Text color={colors.info}>? Select a pipeline template:</Text>
           <Box marginTop={1}>
-            <SelectInput items={TEMPLATES} onSelect={handleTemplateSelect} />
+            <Text color={colors.muted}>Personas will be automatically selected based on your description.</Text>
           </Box>
         </Box>
       )}
@@ -157,21 +134,21 @@ export function InteractiveWizard({ onComplete, onCancel }: InteractiveWizardPro
               <Text bold>{description}</Text>
             </Text>
             <Text>
-              <Text color={colors.muted}>Template:    </Text>
-              <Text bold>{template === 'auto' ? 'auto (Planner decides)' : template}</Text>
-            </Text>
-            <Text>
               <Text color={colors.muted}>Priority:    </Text>
               <Text bold>{priority}</Text>
             </Text>
+            <Text>
+              <Text color={colors.muted}>Personas:    </Text>
+              <Text bold>Auto-selected based on task</Text>
+            </Text>
           </Box>
           <Box marginTop={1}>
-            <Text color={colors.info}>? Start pipeline?</Text>
+            <Text color={colors.info}>? Start execution?</Text>
           </Box>
           <Box marginTop={1}>
             <SelectInput
               items={[
-                { label: 'Yes, start the pipeline', value: 'yes' },
+                { label: 'Yes, start execution', value: 'yes' },
                 { label: 'Go back and change settings', value: 'back' },
                 { label: 'Cancel', value: 'cancel' },
               ]}

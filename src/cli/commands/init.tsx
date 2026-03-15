@@ -10,9 +10,8 @@ import { saveConfig, getDefaultConfig } from '../../utils/config.js';
 import { ProjectContext } from '../../orchestrator/context.js';
 import { ProjectAnalyzer } from '../../analyzer/project-analyzer.js';
 import { CodeStyleProfiler } from '../../analyzer/codestyle-profiler.js';
-import { ArtifactStore } from '../../workspace/artifact-store.js';
-import { AgentRegistry } from '../../agents/index.js';
-import { ClaudeCodeBridge, type ProjectSnapshot } from '../../orchestrator/claude-code-bridge.js';
+import { ClaudeCodeBridge } from '../../orchestrator/claude-code-bridge.js';
+import { PersonaFetcher, PersonaCatalog, getCatalogIndexPath } from '../../personas/index.js';
 import { ensureRtkInitialized, isRtkInstalled } from '../../utils/rtk.js';
 import { EXIT_CODES } from '../types.js';
 
@@ -24,7 +23,7 @@ type Props = {
   options: z.infer<typeof options>;
 };
 
-type InitPhase = 'starting' | 'config' | 'analyzing' | 'profiling' | 'agents' | 'rtk' | 'done' | 'error';
+type InitPhase = 'starting' | 'config' | 'analyzing' | 'profiling' | 'personas' | 'rtk' | 'done' | 'error';
 
 interface InitState {
   phase: InitPhase;
@@ -32,6 +31,7 @@ interface InitState {
   project?: { name: string; language: string; framework: string };
   analysisStats?: { files: number; modules: number; lines: number };
   codeStylePattern?: string;
+  personaStats?: { count: number; divisions: number };
 }
 
 function guardSelfInit(projectPath: string): void {
@@ -97,53 +97,34 @@ export default function InitCommand({ options }: Props): React.ReactElement {
 
         setState((s) => ({ ...s, codeStylePattern: codeStyleProfile.architecture.pattern }));
 
-        setState((s) => ({ ...s, phase: 'agents' }));
-        const topDirs = [...new Set(
-          analysis.modules.map((m) => m.filePath.split('/')[0]).filter(Boolean),
-        )].filter((d) => d !== '.' && !d.startsWith('.')) as string[];
+        setState((s) => ({ ...s, phase: 'personas' }));
+        const fetcher = new PersonaFetcher(config.personas);
+        const fetchResult = await fetcher.fetchPersonas(projectPath);
 
-        const snapshot: ProjectSnapshot = {
-          projectName: analysis.projectName,
-          language: analysis.overview.language,
-          framework: analysis.overview.framework,
-          testFramework: analysis.overview.testFramework,
-          buildTool: analysis.overview.buildTool,
-          ciProvider: project.config.ciProvider,
-          deployTarget: project.config.deployTarget,
-          cloudProvider: String(project.config.cloudProvider),
-          naming: {
-            files: codeStyleProfile.naming.files,
-            directories: codeStyleProfile.naming.directories,
-            variables: codeStyleProfile.naming.variables,
-            functions: codeStyleProfile.naming.functions,
-            classes: codeStyleProfile.naming.classes,
-            testFiles: codeStyleProfile.naming.testFiles,
-          },
-          formatting: {
-            indentation: codeStyleProfile.formatting.indentation,
-            quotes: codeStyleProfile.formatting.quotes,
-            semicolons: codeStyleProfile.formatting.semicolons,
-          },
-          imports: {
-            moduleSystem: codeStyleProfile.imports.moduleSystem,
-            pathStyle: codeStyleProfile.imports.pathStyle,
-            nodeProtocol: codeStyleProfile.imports.nodeProtocol,
-          },
-          architecturePattern: codeStyleProfile.architecture.pattern,
-          architectureLayers: codeStyleProfile.architecture.layers,
-          entryPoints: analysis.entryPoints.slice(0, 5),
-          topDirs,
-          keyDeps: analysis.externalDeps.map((d) => `${d.name}${d.purpose ? ` (${d.purpose})` : ''}`),
-          patterns: analysis.patterns,
-          testDirs: analysis.testStructure.dirs.slice(0, 4),
-          apiStyle: codeStyleProfile.api.style,
-        };
+        if (fetchResult.success && fetchResult.personaCount > 0) {
+          const sourceDir = fetcher.getSourceDir(projectPath);
+          const catalog = await PersonaCatalog.buildFromDirectory(
+            sourceDir,
+            config.personas.repo,
+            fetchResult.commit,
+          );
+          catalog.persist(getCatalogIndexPath(projectPath));
 
-        const artifactStore = new ArtifactStore(projectPath);
-        const agentRegistry = new AgentRegistry(artifactStore);
-        const bridge = new ClaudeCodeBridge(agentRegistry, artifactStore, { projectPath });
+          setState((s) => ({
+            ...s,
+            personaStats: {
+              count: catalog.getCount(),
+              divisions: catalog.getDivisions().length,
+            },
+          }));
+        } else {
+          setState((s) => ({
+            ...s,
+            personaStats: { count: 0, divisions: 0 },
+          }));
+        }
 
-        bridge.writeAgentInstructionFiles(snapshot);
+        const bridge = new ClaudeCodeBridge({ projectPath });
         const claudeMd = bridge.generateMainClaudeMd();
         fs.writeFileSync(path.join(projectPath, 'CLAUDE.md'), claudeMd, 'utf-8');
 
@@ -178,26 +159,34 @@ export default function InitCommand({ options }: Props): React.ReactElement {
 
       <Box marginLeft={2} flexDirection="column">
         {state.phase === 'config' && <Spinner label="Creating cdm.config.yaml..." />}
-        {['analyzing', 'profiling', 'agents', 'rtk', 'done'].includes(state.phase) && (
+        {['analyzing', 'profiling', 'personas', 'rtk', 'done'].includes(state.phase) && (
           <Text color={colors.success}>✅ Created cdm.config.yaml</Text>
         )}
 
         {state.phase === 'analyzing' && <Spinner label="Running project analysis..." />}
-        {['profiling', 'agents', 'rtk', 'done'].includes(state.phase) && state.analysisStats && (
+        {['profiling', 'personas', 'rtk', 'done'].includes(state.phase) && state.analysisStats && (
           <Text color={colors.success}>
             ✅ Generated .cdm/analysis/ ({state.analysisStats.files} files · {state.analysisStats.modules} modules · {state.analysisStats.lines.toLocaleString()} lines)
           </Text>
         )}
 
         {state.phase === 'profiling' && <Spinner label="Profiling code style..." />}
-        {['agents', 'rtk', 'done'].includes(state.phase) && state.codeStylePattern && (
+        {['personas', 'rtk', 'done'].includes(state.phase) && state.codeStylePattern && (
           <Text color={colors.success}>✅ Generated .cdm/analysis/codestyle.md ({state.codeStylePattern})</Text>
         )}
 
-        {state.phase === 'agents' && <Spinner label="Generating agent instruction files..." />}
-        {['rtk', 'done'].includes(state.phase) && (
+        {state.phase === 'personas' && <Spinner label="Fetching personas from agency-agents..." />}
+        {['rtk', 'done'].includes(state.phase) && state.personaStats && (
           <>
-            <Text color={colors.success}>✅ Generated agent instruction files in .cdm/agents/</Text>
+            {state.personaStats.count > 0 ? (
+              <Text color={colors.success}>
+                ✅ Indexed {state.personaStats.count} personas from {state.personaStats.divisions} divisions
+              </Text>
+            ) : (
+              <Text color={colors.warning}>
+                ⚠️ Could not fetch personas — run `cdm personas update` to retry
+              </Text>
+            )}
             <Text color={colors.success}>✅ Generated CLAUDE.md (references .cdm/ structure)</Text>
           </>
         )}
@@ -206,7 +195,7 @@ export default function InitCommand({ options }: Props): React.ReactElement {
         {state.phase === 'done' && (
           <>
             {isRtkInstalled() ? (
-              <Text color={colors.success}>✅ RTK hook active — agent CLI outputs will be compressed</Text>
+              <Text color={colors.success}>✅ RTK hook active — CLI outputs will be compressed</Text>
             ) : (
               <Text color={colors.muted}>   Tip: Install rtk for 60-90% token savings: brew install rtk</Text>
             )}
@@ -217,7 +206,7 @@ export default function InitCommand({ options }: Props): React.ReactElement {
       {state.phase === 'done' && (
         <Box marginTop={1} flexDirection="column">
           <Text bold color={colors.success}>🎉 CDM initialized! Run `cdm start "your feature"` to begin.</Text>
-          <Text color={colors.muted}>   All CDM data is in .cdm/ — CLAUDE.md is the entry point.</Text>
+          <Text color={colors.muted}>   Use `cdm personas list` to see available personas.</Text>
         </Box>
       )}
     </Box>

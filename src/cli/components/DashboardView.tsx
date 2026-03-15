@@ -46,8 +46,8 @@ export function DashboardView({ data }: DashboardViewProps): React.ReactElement 
               <Text>{weekStats.featuresCreated}</Text>
             </Text>
             <Text>
-              <Text color={colors.muted}>Pipelines:    </Text>
-              <Text>{weekStats.pipelinesRun}</Text>
+              <Text color={colors.muted}>Executions:   </Text>
+              <Text>{weekStats.executionsRun}</Text>
             </Text>
             <Text>
               <Text color={colors.muted}>Tokens:       </Text>
@@ -133,16 +133,16 @@ function ArtifactRow({ artifact }: { artifact: RecentArtifact }): React.ReactEle
 }
 
 function FeatureRow({ feature }: { feature: ActiveFeature }): React.ReactElement {
-  const progress = feature.totalSteps > 0
-    ? `${feature.currentStep}/${feature.totalSteps}`
-    : 'planning';
+  const statusInfo = feature.primaryPersona 
+    ? `${feature.currentStep} - ${feature.primaryPersona}`
+    : feature.currentStep;
   
   return (
     <Box>
       <Text color={colors.info}>• </Text>
       <Text>{truncate(feature.name, 20)} </Text>
       <StatusBadge status={feature.status} />
-      <Text color={colors.muted}> ({progress})</Text>
+      <Text color={colors.muted}> ({statusInfo})</Text>
     </Box>
   );
 }

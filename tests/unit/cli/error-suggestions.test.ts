@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import {
   getErrorSuggestion,
-  getErrorSuggestionForStep,
+  getErrorSuggestionForPersona,
 } from '../../../src/utils/error-suggestions.js';
-import { AgentRole } from '../../../src/types.js';
 
 describe('error-suggestions', () => {
   describe('getErrorSuggestion', () => {
@@ -67,19 +66,67 @@ describe('error-suggestions', () => {
       expect(suggestion.actions.some((a) => a.command === 'cdm status')).toBe(true);
     });
 
-    it('matches invalid template error', () => {
-      const error = new Error('Invalid template: unknown-template');
+    it('matches persona not found error', () => {
+      const error = new Error('Persona not found: invalid-persona-id');
       const suggestion = getErrorSuggestion(error);
       
-      expect(suggestion.title).toBe('Invalid Template');
-      expect(suggestion.actions.some((a) => a.command === 'cdm pipeline')).toBe(true);
+      expect(suggestion.title).toBe('Persona Not Found');
+      expect(suggestion.actions.some((a) => a.command === 'cdm personas list')).toBe(true);
+    });
+
+    it('matches empty persona catalog error', () => {
+      const error = new Error('Catalog empty, no personas available');
+      const suggestion = getErrorSuggestion(error);
+      
+      expect(suggestion.title).toBe('Empty Persona Catalog');
+      expect(suggestion.actions.some((a) => a.command === 'cdm personas update')).toBe(true);
+    });
+
+    it('matches Claude CLI not available error', () => {
+      const error = new Error('Claude CLI not available in PATH');
+      const suggestion = getErrorSuggestion(error);
+      
+      expect(suggestion.title).toBe('Claude CLI Not Available');
+      expect(suggestion.actions.some((a) => a.command.includes('simulation'))).toBe(true);
+    });
+
+    it('matches missing artifact error', () => {
+      const error = new Error('Artifact not found: requirements-doc');
+      const suggestion = getErrorSuggestion(error);
+      
+      expect(suggestion.title).toBe('Missing Artifact');
+      expect(suggestion.actions.some((a) => a.command === 'cdm artifacts')).toBe(true);
+    });
+
+    it('matches linting error', () => {
+      const error = new Error('ESLint error: too many errors');
+      const suggestion = getErrorSuggestion(error);
+      
+      expect(suggestion.title).toBe('Linting Errors');
+      expect(suggestion.actions.some((a) => a.command === 'npm run lint:fix')).toBe(true);
+    });
+
+    it('matches security vulnerability error', () => {
+      const error = new Error('npm audit found critical vulnerabilities');
+      const suggestion = getErrorSuggestion(error);
+      
+      expect(suggestion.title).toBe('Security Vulnerabilities');
+      expect(suggestion.actions.some((a) => a.command === 'npm audit fix')).toBe(true);
+    });
+
+    it('matches out of memory error', () => {
+      const error = new Error('FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of memory');
+      const suggestion = getErrorSuggestion(error);
+      
+      expect(suggestion.title).toBe('Out of Memory');
+      expect(suggestion.actions.some((a) => a.command.includes('--max-old-space-size'))).toBe(true);
     });
 
     it('returns default suggestion for unknown errors', () => {
       const error = new Error('Some random unknown error');
       const suggestion = getErrorSuggestion(error);
       
-      expect(suggestion.title).toBe('Pipeline Error');
+      expect(suggestion.title).toBe('Execution Error');
       expect(suggestion.actions.length).toBeGreaterThan(0);
     });
 
@@ -90,29 +137,38 @@ describe('error-suggestions', () => {
     });
   });
 
-  describe('getErrorSuggestionForStep', () => {
-    it('includes step information', () => {
+  describe('getErrorSuggestionForPersona', () => {
+    it('includes persona ID in response', () => {
       const error = new Error('Test failed');
-      const suggestion = getErrorSuggestionForStep(error, 2);
+      const suggestion = getErrorSuggestionForPersona(error, 'software-engineer');
       
-      expect(suggestion.step).toBe(2);
-    });
-
-    it('includes agent information', () => {
-      const error = new Error('Test failed');
-      const suggestion = getErrorSuggestionForStep(error, 2, AgentRole.DEVELOPER);
-      
-      expect(suggestion.step).toBe(2);
-      expect(suggestion.agent).toBe(AgentRole.DEVELOPER);
+      expect(suggestion.personaId).toBe('software-engineer');
     });
 
     it('still matches error patterns', () => {
       const error = new Error('TypeScript compilation failed');
-      const suggestion = getErrorSuggestionForStep(error, 1, AgentRole.DEVELOPER);
+      const suggestion = getErrorSuggestionForPersona(error, 'code-reviewer');
       
       expect(suggestion.title).toBe('TypeScript Compilation Error');
-      expect(suggestion.step).toBe(1);
-      expect(suggestion.agent).toBe(AgentRole.DEVELOPER);
+      expect(suggestion.personaId).toBe('code-reviewer');
+    });
+
+    it('works without persona ID', () => {
+      const error = new Error('Test failed');
+      const suggestion = getErrorSuggestionForPersona(error);
+      
+      expect(suggestion.personaId).toBeUndefined();
+    });
+
+    it('preserves all base suggestion properties', () => {
+      const error = new Error('ENOENT: no such file or directory, open \'.cdm/config.yaml\'');
+      const suggestion = getErrorSuggestionForPersona(error, 'devops-engineer');
+      
+      expect(suggestion.title).toBe('Project Not Initialized');
+      expect(suggestion.message).toContain('ENOENT');
+      expect(suggestion.suggestion).toBeDefined();
+      expect(suggestion.actions.length).toBeGreaterThan(0);
+      expect(suggestion.personaId).toBe('devops-engineer');
     });
   });
 });

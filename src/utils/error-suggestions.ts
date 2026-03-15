@@ -1,4 +1,7 @@
-import type { AgentRole } from '../types.js';
+/**
+ * Error suggestions for CDM CLI.
+ * Refactored for dynamic persona system.
+ */
 
 export interface ErrorAction {
   command: string;
@@ -18,8 +21,7 @@ export interface EnhancedErrorInfo {
   suggestion: string;
   actions: ErrorAction[];
   details?: string;
-  step?: number;
-  agent?: AgentRole;
+  personaId?: string;
 }
 
 const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
@@ -38,7 +40,6 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
     suggestion: 'The generated code has TypeScript errors. Review the error details and fix the type issues.',
     actions: [
       { command: 'cdm resume', description: 'Retry after fixing the errors manually' },
-      { command: 'cdm resume --skip', description: 'Skip this step and continue' },
       { command: 'npm run typecheck', description: 'Run typecheck to see all errors' },
     ],
   },
@@ -66,8 +67,7 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
     title: 'Rate Limited',
     suggestion: 'You have exceeded the API rate limit. Wait a moment and retry.',
     actions: [
-      { command: 'cdm resume', description: 'Resume the pipeline after waiting' },
-      { command: 'cdm config --set pipeline.retryDelay=5000', description: 'Increase retry delay' },
+      { command: 'cdm resume', description: 'Resume after waiting' },
     ],
   },
   {
@@ -75,8 +75,7 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
     title: 'Request Timeout',
     suggestion: 'The request timed out. This may be due to network issues or a large task.',
     actions: [
-      { command: 'cdm resume', description: 'Resume from the last successful step' },
-      { command: 'cdm config --set pipeline.timeout=120000', description: 'Increase timeout' },
+      { command: 'cdm resume', description: 'Resume from the last successful point' },
     ],
   },
   {
@@ -91,10 +90,9 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
   {
     pattern: /out.?of.?memory|heap|ENOMEM/i,
     title: 'Out of Memory',
-    suggestion: 'The process ran out of memory. Try running with fewer concurrent tasks.',
+    suggestion: 'The process ran out of memory.',
     actions: [
       { command: 'NODE_OPTIONS="--max-old-space-size=4096" cdm start ...', description: 'Increase Node.js memory limit' },
-      { command: 'cdm start --template quick-fix ...', description: 'Use a smaller pipeline template' },
     ],
   },
   {
@@ -107,30 +105,30 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
     ],
   },
   {
-    pattern: /invalid.*template|template.*not.*found/i,
-    title: 'Invalid Template',
-    suggestion: 'The specified pipeline template does not exist.',
+    pattern: /persona.*not.*found|invalid.*persona/i,
+    title: 'Persona Not Found',
+    suggestion: 'The specified persona ID does not exist in the catalog.',
     actions: [
-      { command: 'cdm pipeline', description: 'List available templates' },
-      { command: 'cdm start --template feature "..."', description: 'Use the default feature template' },
+      { command: 'cdm personas list', description: 'List all available personas' },
+      { command: 'cdm personas update', description: 'Update persona catalog from GitHub' },
+    ],
+  },
+  {
+    pattern: /catalog.*empty|no.*personas/i,
+    title: 'Empty Persona Catalog',
+    suggestion: 'The persona catalog is empty. Fetch personas from the agency-agents repo.',
+    actions: [
+      { command: 'cdm personas update', description: 'Fetch personas from GitHub' },
+      { command: 'cdm init', description: 'Re-initialize the project' },
     ],
   },
   {
     pattern: /artifact.*not.*found|missing.*artifact/i,
     title: 'Missing Artifact',
-    suggestion: 'A required artifact from a previous step is missing.',
+    suggestion: 'A required artifact is missing.',
     actions: [
       { command: 'cdm artifacts', description: 'List all artifacts' },
-      { command: 'cdm resume --skip-steps <step>', description: 'Skip the problematic step' },
-    ],
-  },
-  {
-    pattern: /gate.*fail|gate.*condition/i,
-    title: 'Gate Condition Failed',
-    suggestion: 'A pipeline gate condition was not met. Review the issues and fix them.',
-    actions: [
-      { command: 'cdm show <feature-id>', description: 'View feature details and issues' },
-      { command: 'cdm resume', description: 'Retry after fixing the issues' },
+      { command: 'cdm resume', description: 'Re-run the execution' },
     ],
   },
   {
@@ -151,14 +149,23 @@ const ERROR_SUGGESTIONS: ErrorSuggestion[] = [
       { command: 'npm audit', description: 'View vulnerability details' },
     ],
   },
+  {
+    pattern: /claude.*not.*available|claude.*cli.*not.*found/i,
+    title: 'Claude CLI Not Available',
+    suggestion: 'The Claude CLI is not installed or not in PATH.',
+    actions: [
+      { command: 'npm install -g @anthropic-ai/claude-code', description: 'Install Claude CLI globally' },
+      { command: 'cdm start --mode simulation', description: 'Run in simulation mode' },
+    ],
+  },
 ];
 
 const DEFAULT_SUGGESTION: Omit<ErrorSuggestion, 'pattern'> = {
-  title: 'Pipeline Error',
-  suggestion: 'An unexpected error occurred during pipeline execution.',
+  title: 'Execution Error',
+  suggestion: 'An unexpected error occurred during execution.',
   actions: [
-    { command: 'cdm resume', description: 'Retry from the last successful step' },
-    { command: 'cdm status', description: 'Check the current pipeline status' },
+    { command: 'cdm resume', description: 'Retry the execution' },
+    { command: 'cdm status', description: 'Check the current status' },
     { command: 'cdm history --last 1', description: 'View the latest execution details' },
   ],
 };
@@ -188,15 +195,13 @@ export function getErrorSuggestion(error: Error | string): EnhancedErrorInfo {
   };
 }
 
-export function getErrorSuggestionForStep(
+export function getErrorSuggestionForPersona(
   error: Error | string,
-  stepIndex: number,
-  agent?: AgentRole
+  personaId?: string,
 ): EnhancedErrorInfo {
   const base = getErrorSuggestion(error);
   return {
     ...base,
-    step: stepIndex,
-    agent,
+    personaId,
   };
 }

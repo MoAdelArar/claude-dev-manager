@@ -6,20 +6,19 @@ import * as fs from 'node:fs';
 import { colors } from '../utils/colors.js';
 import { Spinner } from '../components/Spinner.js';
 import { Header } from '../components/Header.js';
-import { PipelineProgress } from '../components/PipelineProgress.js';
 import { EnhancedErrorDisplay } from '../components/EnhancedErrorDisplay.js';
 import { InteractiveWizard } from '../components/InteractiveWizard.js';
 import { ProjectContext } from '../../orchestrator/context.js';
 import { ArtifactStore } from '../../workspace/artifact-store.js';
-import { PipelineOrchestrator, type PipelineOptions, type PipelineStepInfo } from '../../orchestrator/pipeline.js';
+import { ClaudeCodeBridge } from '../../orchestrator/claude-code-bridge.js';
+import { DynamicExecutor } from '../../executor/dynamic-executor.js';
+import { PersonaCatalog, PersonaResolver, getCatalogIndexPath } from '../../personas/index.js';
 import { loadConfig } from '../../utils/config.js';
 import { addFileTransport } from '../../utils/logger.js';
 import { isRtkInstalled, getRtkGain } from '../../utils/rtk.js';
-import { getTemplateEstimate, estimateFromDescription } from '../../utils/cost-estimator.js';
-import { CostEstimate } from '../components/CostEstimate.js';
-import { formatAgentName, getAgentIcon, formatDuration, formatTokens } from '../utils/format.js';
-import { FeaturePriority, StepStatus, type PipelineResult } from '../../types.js';
-import { EXIT_CODES, type PipelineStepUI } from '../types.js';
+import { formatDuration, formatTokens, getPersonaIcon, formatPersonaName } from '../utils/format.js';
+import { FeaturePriority, type DynamicResult } from '../../types.js';
+import { EXIT_CODES } from '../types.js';
 
 const packageJsonPath = path.join(import.meta.dirname, '..', '..', '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
@@ -31,17 +30,16 @@ export const args = z.tuple([
 
 export const options = z.object({
   priority: z.string().default('medium').describe('Feature priority (low|medium|high|critical)'),
-  template: z.string().optional().describe('Pipeline template (quick-fix|feature|full-feature|review-only|design-only|deploy)'),
-  skipSteps: z.string().default('').describe('Comma-separated step indices to skip'),
-  maxRetries: z.string().default('2').describe('Maximum retries per step'),
-  dryRun: z.boolean().default(false).describe('Show what would happen without executing'),
+  persona: z.string().optional().describe('Force a specific primary persona by ID'),
+  review: z.boolean().default(false).describe('Force a review pass'),
+  dryRun: z.boolean().default(false).describe('Show persona selection without executing'),
   interactive: z.boolean().default(true).describe('Run with interactive prompts'),
   project: z.string().default(process.cwd()).describe('Project path'),
   mode: z.string().default('claude-cli').describe('Execution mode: claude-cli or simulation'),
-  model: z.string().optional().describe('Claude model to use (e.g. claude-sonnet-4-20250514)'),
+  model: z.string().optional().describe('Claude model to use'),
   verbose: z.boolean().default(false).describe('Verbose output'),
   json: z.boolean().default(false).describe('Output result as JSON'),
-  estimate: z.boolean().default(false).describe('Show cost/time estimate without running'),
+  estimate: z.boolean().default(false).describe('Show persona selection without running'),
 });
 
 type Props = {
@@ -51,22 +49,27 @@ type Props = {
 
 interface WizardResult {
   description: string;
-  template: string;
   priority: string;
 }
 
-type StartPhase = 'init' | 'planning' | 'running' | 'done' | 'error';
+type StartPhase = 'init' | 'resolving' | 'executing' | 'reviewing' | 'done' | 'error';
+
+interface PersonaSelection {
+  primaryName: string;
+  primaryEmoji: string;
+  primaryId: string;
+  supportingNames: string[];
+  reviewNames: string[];
+  reason: string;
+}
 
 interface StartState {
   phase: StartPhase;
   projectName?: string;
   language?: string;
   framework?: string;
-  currentStep: number;
-  steps: PipelineStepUI[];
-  currentAgent?: string;
-  currentTask?: string;
-  result?: PipelineResult;
+  personaSelection?: PersonaSelection;
+  result?: DynamicResult;
   error?: Error;
 }
 
@@ -101,14 +104,9 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
   const [showWizard, setShowWizard] = useState(!argDescription && options.interactive);
   
   const description = wizardResult?.description ?? argDescription ?? '';
-  const effectiveTemplate = wizardResult?.template ?? options.template;
   const effectivePriority = wizardResult?.priority ?? options.priority;
 
-  const [state, setState] = useState<StartState>({
-    phase: 'init',
-    currentStep: 0,
-    steps: [],
-  });
+  const [state, setState] = useState<StartState>({ phase: 'init' });
 
   const handleWizardComplete = (result: WizardResult): void => {
     setWizardResult(result);
@@ -121,11 +119,11 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
   };
 
   useEffect(() => {
-    if (showWizard || !description || options.estimate) {
+    if (showWizard || !description) {
       return;
     }
 
-    async function runPipeline(): Promise<void> {
+    async function runExecution(): Promise<void> {
       try {
         const projectPath = options.project;
         guardSelfInit(projectPath);
@@ -147,79 +145,78 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
           framework: project.config.framework,
         }));
 
+        const catalogPath = getCatalogIndexPath(projectPath);
+        const catalog = PersonaCatalog.loadFromIndex(catalogPath);
+
+        if (!catalog || catalog.getCount() === 0) {
+          throw new Error('Persona catalog is empty. Run `cdm init` or `cdm personas update` first.');
+        }
+
+        setState((s) => ({ ...s, phase: 'resolving' }));
+
+        const resolver = new PersonaResolver(config.personas);
+        const resolved = resolver.resolve(
+          description,
+          project.config,
+          catalog,
+          {
+            config: config.personas,
+            forceReview: options.review,
+            forcePrimaryPersona: options.persona,
+          },
+        );
+
+        const selection: PersonaSelection = {
+          primaryName: resolved.primary.frontmatter.name,
+          primaryEmoji: resolved.primary.frontmatter.emoji || '🤖',
+          primaryId: resolved.primary.id,
+          supportingNames: resolved.supporting.map((p) => p.frontmatter.name),
+          reviewNames: resolved.reviewLens.map((p) => p.frontmatter.name),
+          reason: resolved.reason,
+        };
+
+        setState((s) => ({ ...s, personaSelection: selection }));
+
+        if (options.dryRun || options.estimate) {
+          setState((s) => ({ ...s, phase: 'done' }));
+          return;
+        }
+
+        setState((s) => ({ ...s, phase: 'executing' }));
+
         const priority = mapPriority(effectivePriority);
         const feature = context.createFeature(description, description, priority);
 
-        const skipSteps = options.skipSteps
-          ? options.skipSteps.split(',').map((s) => s.trim())
-          : [];
+        const analysisPath = path.join(projectPath, '.cdm', 'analysis', 'overview.md');
+        const codestylePath = path.join(projectPath, '.cdm', 'analysis', 'codestyle.md');
+        const analysisContent = fs.existsSync(analysisPath) ? fs.readFileSync(analysisPath, 'utf-8') : undefined;
+        const codeStyleContent = fs.existsSync(codestylePath) ? fs.readFileSync(codestylePath, 'utf-8') : undefined;
 
-        setState((s) => ({ ...s, phase: 'planning' }));
-
-        const pipelineOptions: PipelineOptions = {
-          skipSteps,
-          template: effectiveTemplate,
-          maxRetries: parseInt(options.maxRetries, 10),
-          dryRun: options.dryRun,
-          interactive: options.interactive,
-          onStepStart: (step: PipelineStepInfo) => {
-            setState((s) => {
-              const existingStep = s.steps.find((st) => st.index === step.index);
-              if (existingStep) {
-                return {
-                  ...s,
-                  currentStep: step.index,
-                  steps: s.steps.map((st) =>
-                    st.index === step.index ? { ...st, status: StepStatus.IN_PROGRESS } : st
-                  ),
-                };
-              }
-              return {
-                ...s,
-                currentStep: step.index,
-                steps: [...s.steps, {
-                  index: step.index,
-                  description: step.description,
-                  status: StepStatus.IN_PROGRESS,
-                  agent: step.agent,
-                  skills: step.skills,
-                }],
-              };
-            });
-          },
-          onStepComplete: (step) => {
-            setState((s) => ({
-              ...s,
-              steps: s.steps.map((st) =>
-                st.index === step.index ? { ...st, status: StepStatus.COMPLETED } : st
-              ),
-            }));
-          },
-          onAgentWork: (role, task) => {
-            setState((s) => ({
-              ...s,
-              phase: 'running',
-              currentAgent: formatAgentName(role),
-              currentTask: (task as { title?: string }).title ?? 'Processing...',
-            }));
-          },
-          onError: (stepIndex, error) => {
-            setState((s) => ({
-              ...s,
-              steps: s.steps.map((st) =>
-                st.index === stepIndex ? { ...st, status: StepStatus.FAILED } : st
-              ),
-            }));
-          },
-        };
-
-        const bridgeOptions = {
+        const bridge = new ClaudeCodeBridge({
+          projectPath,
           executionMode: options.mode as 'claude-cli' | 'simulation',
           model: options.model,
-        };
-        const orchestrator = new PipelineOrchestrator(context, artifactStore, config, bridgeOptions);
+        });
 
-        const result = await orchestrator.runFeaturePipeline(feature, pipelineOptions);
+        const executor = new DynamicExecutor(bridge, artifactStore, config.execution);
+
+        if (resolved.needsReviewPass && resolved.reviewLens.length > 0) {
+          setState((s) => ({ ...s, phase: 'reviewing' }));
+        }
+
+        const result = await executor.execute(
+          {
+            projectPath,
+            feature,
+            resolved,
+            analysisContent,
+            codeStyleContent,
+          },
+          {
+            config: config.execution,
+            forceReview: options.review,
+          },
+        );
 
         setState((s) => ({
           ...s,
@@ -228,7 +225,7 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
         }));
 
         if (!result.success) {
-          process.exitCode = EXIT_CODES.PIPELINE_FAILURE;
+          process.exitCode = EXIT_CODES.EXECUTION_FAILURE;
         }
       } catch (error) {
         setState((s) => ({
@@ -240,23 +237,16 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
       }
     }
 
-    runPipeline();
-  }, [description, showWizard, effectiveTemplate, effectivePriority, options]);
+    runExecution();
+  }, [description, showWizard, effectivePriority, options]);
 
   if (showWizard) {
     return (
       <InteractiveWizard
-        onComplete={handleWizardComplete}
+        onComplete={(result) => handleWizardComplete({ description: result.description, priority: result.priority })}
         onCancel={handleWizardCancel}
       />
     );
-  }
-
-  if (options.estimate && description) {
-    const estimate = effectiveTemplate
-      ? getTemplateEstimate(effectiveTemplate)
-      : estimateFromDescription(description);
-    return <CostEstimate estimate={estimate} description={description} />;
   }
 
   if (state.phase === 'error' && state.error) {
@@ -270,43 +260,63 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Header version={VERSION} title="Multi-Agent Development Pipeline powered by Claude Code" />
+      <Header version={VERSION} title="Dynamic Persona-Based Development" />
 
       {state.projectName && (
         <Box marginLeft={2} flexDirection="column" marginBottom={1}>
           <Text>Project: <Text bold>{state.projectName}</Text></Text>
           <Text>Language: {state.language} | Framework: {state.framework}</Text>
           <Text>Feature: <Text bold>{description}</Text></Text>
-          {effectiveTemplate && <Text>Template: <Text bold>{effectiveTemplate}</Text></Text>}
         </Box>
       )}
 
       {!isRtkInstalled() && (
-        <Text color={colors.muted}>Tip: Install rtk to reduce agent token usage by 60-90%: brew install rtk</Text>
+        <Text color={colors.muted}>Tip: Install rtk to reduce token usage by 60-90%: brew install rtk</Text>
       )}
 
-      {options.dryRun && (
+      {(options.dryRun || options.estimate) && (
         <Box marginY={1}>
-          <Text color={colors.warning}>📋 DRY RUN — Pipeline will analyze task and show plan:</Text>
+          <Text color={colors.warning}>📋 {options.estimate ? 'ESTIMATE' : 'DRY RUN'} — Showing persona selection:</Text>
         </Box>
       )}
 
-      {state.phase === 'init' && <Spinner label="Initializing pipeline..." />}
-      {state.phase === 'planning' && <Spinner label="Planning execution..." />}
+      {state.phase === 'init' && <Spinner label="Initializing..." />}
+      {state.phase === 'resolving' && <Spinner label="Resolving personas..." />}
 
-      {(state.phase === 'running' || state.phase === 'done') && state.steps.length > 0 && (
-        <>
-          <Text> </Text>
+      {state.personaSelection && (
+        <Box marginTop={1} flexDirection="column">
           <Text color={colors.muted}>{'─'.repeat(60)}</Text>
-          <Text bold> 📋 Pipeline Execution</Text>
+          <Text bold> 🎭 Persona Selection</Text>
           <Text> </Text>
-          <PipelineProgress steps={state.steps} currentStep={state.currentStep} />
-        </>
+          <Box marginLeft={2} flexDirection="column">
+            <Text>
+              Primary: <Text bold>{state.personaSelection.primaryEmoji} {state.personaSelection.primaryName}</Text>
+              <Text color={colors.muted}> ({state.personaSelection.primaryId})</Text>
+            </Text>
+            {state.personaSelection.supportingNames.length > 0 && (
+              <Text>
+                Supporting: <Text color={colors.info}>{state.personaSelection.supportingNames.join(', ')}</Text>
+              </Text>
+            )}
+            {state.personaSelection.reviewNames.length > 0 && (
+              <Text>
+                Review: <Text color={colors.warning}>{state.personaSelection.reviewNames.join(', ')}</Text>
+              </Text>
+            )}
+            <Text color={colors.muted}>Reason: {state.personaSelection.reason}</Text>
+          </Box>
+        </Box>
       )}
 
-      {state.phase === 'running' && state.currentAgent && (
-        <Box marginTop={1} marginLeft={2}>
-          <Spinner label={`${getAgentIcon(state.currentAgent)} ${state.currentAgent}: ${state.currentTask}`} />
+      {state.phase === 'executing' && (
+        <Box marginTop={1}>
+          <Spinner label={`${state.personaSelection?.primaryEmoji || '🤖'} ${state.personaSelection?.primaryName || 'Persona'} working...`} />
+        </Box>
+      )}
+
+      {state.phase === 'reviewing' && (
+        <Box marginTop={1}>
+          <Spinner label={`🔍 Running review pass...`} />
         </Box>
       )}
 
@@ -315,23 +325,19 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
           <Text color={colors.muted}>{'─'.repeat(60)}</Text>
           <Text> </Text>
           {state.result.success ? (
-            <Text bold color={colors.success}>✅ Pipeline Completed Successfully!</Text>
+            <Text bold color={colors.success}>✅ Execution Completed Successfully!</Text>
           ) : (
             <>
-              <Text bold color={colors.error}>❌ Pipeline Failed</Text>
-              {state.result.stepsFailed && state.result.stepsFailed.length > 0 && (
-                <Text color={colors.muted}>  Tip: Run `cdm resume` to retry from the failed step.</Text>
-              )}
+              <Text bold color={colors.error}>❌ Execution Failed</Text>
+              <Text color={colors.muted}>  Run `cdm resume` to retry.</Text>
             </>
           )}
           <Text> </Text>
           <Text bold>Summary:</Text>
           <Box marginLeft={2} flexDirection="column">
             <Text>Execution mode:   <Text color={colors.info}>{state.result.executionMode}</Text></Text>
-            <Text>Template used:    <Text color={colors.info}>{state.result.templateUsed || 'auto-selected'}</Text></Text>
-            <Text>Steps completed:  <Text color={colors.success}>{state.result.stepsCompleted?.length ?? 0}</Text></Text>
-            <Text>Steps failed:     <Text color={colors.error}>{state.result.stepsFailed?.length ?? 0}</Text></Text>
-            <Text>Steps skipped:    <Text color={colors.warning}>{state.result.stepsSkipped?.length ?? 0}</Text></Text>
+            <Text>Primary persona:  <Text color={colors.info}>{state.result.personas.primary}</Text></Text>
+            <Text>Review pass:      <Text color={state.result.hadReviewPass ? colors.success : colors.muted}>{state.result.hadReviewPass ? 'Yes' : 'No'}</Text></Text>
             <Text>Artifacts:        <Text color={colors.info}>{state.result.artifacts.length}</Text></Text>
             <Text>Issues:           <Text color={colors.warning}>{state.result.issues.length}</Text></Text>
             <Text>Tokens used:      {formatTokens(state.result.totalTokensUsed)}</Text>
@@ -365,16 +371,6 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
             </>
           )}
 
-          {state.result.stepsFailed && state.result.stepsFailed.length > 0 && (
-            <>
-              <Text> </Text>
-              <Text bold color={colors.error}>Failed Steps:</Text>
-              {state.result.stepsFailed.map((step) => (
-                <Text key={step}>  <Text color={colors.error}>✗</Text> Step {step}</Text>
-              ))}
-            </>
-          )}
-
           {state.result.artifacts.length > 0 && (
             <>
               <Text> </Text>
@@ -389,8 +385,14 @@ export default function StartCommand({ args, options }: Props): React.ReactEleme
           )}
         </Box>
       )}
+
+      {state.phase === 'done' && (options.dryRun || options.estimate) && (
+        <Box marginTop={1}>
+          <Text color={colors.muted}>Run without --dry-run or --estimate to execute.</Text>
+        </Box>
+      )}
     </Box>
   );
 }
 
-export const description = 'Start the development pipeline for a new feature';
+export const description = 'Start development for a new feature with dynamic persona selection';

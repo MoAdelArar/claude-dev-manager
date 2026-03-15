@@ -1,89 +1,18 @@
+/**
+ * Artifact storage and retrieval for CDM.
+ * Refactored for dynamic persona system.
+ */
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import {
   type Artifact,
-  ArtifactType,
+  type ArtifactType,
   type ArtifactStatus,
   type ReviewStatus,
-  type AgentRole,
 } from '../types';
 import logger from '../utils/logger';
-
-const SKILL_ARTIFACT_MAP: Record<string, ArtifactType[]> = {
-  // Planning skills
-  'requirements-analysis': [
-    ArtifactType.REQUIREMENTS_DOC,
-    ArtifactType.USER_STORIES,
-    ArtifactType.ACCEPTANCE_CRITERIA,
-  ],
-  'task-decomposition': [
-    ArtifactType.TASK_LIST,
-    ArtifactType.EXECUTION_PLAN,
-  ],
-  // Design skills
-  'system-design': [
-    ArtifactType.ARCHITECTURE_DOC,
-    ArtifactType.SYSTEM_DIAGRAM,
-  ],
-  'api-design': [
-    ArtifactType.API_SPEC,
-    ArtifactType.API_DOCUMENTATION,
-  ],
-  'data-modeling': [
-    ArtifactType.DATABASE_SCHEMA,
-    ArtifactType.DATA_MODEL,
-  ],
-  'ui-design': [
-    ArtifactType.UI_SPEC,
-    ArtifactType.WIREFRAME,
-    ArtifactType.COMPONENT_SPEC,
-  ],
-  // Build skills
-  'code-implementation': [
-    ArtifactType.SOURCE_CODE,
-  ],
-  'test-writing': [
-    ArtifactType.UNIT_TESTS,
-    ArtifactType.INTEGRATION_TESTS,
-    ArtifactType.E2E_TESTS,
-    ArtifactType.TEST_REPORT,
-  ],
-  'documentation': [
-    ArtifactType.API_DOCUMENTATION,
-    ArtifactType.USER_DOCUMENTATION,
-    ArtifactType.DEVELOPER_DOCUMENTATION,
-    ArtifactType.CHANGELOG,
-  ],
-  // Review skills
-  'code-review': [
-    ArtifactType.CODE_REVIEW_REPORT,
-  ],
-  'security-audit': [
-    ArtifactType.SECURITY_REPORT,
-  ],
-  'performance-analysis': [
-    ArtifactType.PERFORMANCE_REPORT,
-  ],
-  'accessibility-audit': [
-    ArtifactType.ACCESSIBILITY_REPORT,
-  ],
-  'test-validation': [
-    ArtifactType.TEST_REPORT,
-  ],
-  // Operations skills
-  'ci-cd': [
-    ArtifactType.CI_CD_CONFIG,
-  ],
-  'deployment': [
-    ArtifactType.DEPLOYMENT_PLAN,
-    ArtifactType.INFRASTRUCTURE_CONFIG,
-    ArtifactType.RUNBOOK,
-  ],
-  'monitoring': [
-    ArtifactType.MONITORING_CONFIG,
-  ],
-};
 
 export class ArtifactStore {
   private artifacts: Map<string, Artifact> = new Map();
@@ -122,9 +51,9 @@ export class ArtifactStore {
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }
 
-  getByCreator(role: AgentRole): Artifact[] {
+  getByCreator(personaId: string): Artifact[] {
     return Array.from(this.artifacts.values())
-      .filter((a) => a.createdBy === role)
+      .filter((a) => a.createdBy === personaId)
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }
 
@@ -152,17 +81,10 @@ export class ArtifactStore {
     return Array.from(this.artifacts.values());
   }
 
-  getForSkills(skillIds: string[]): Artifact[] {
-    const types = new Set<ArtifactType>();
-    for (const skillId of skillIds) {
-      const skillTypes = SKILL_ARTIFACT_MAP[skillId];
-      if (skillTypes) {
-        for (const type of skillTypes) {
-          types.add(type);
-        }
-      }
-    }
-    return Array.from(types).flatMap((type) => this.getByType(type));
+  getForFeature(featureId: string): Artifact[] {
+    return Array.from(this.artifacts.values())
+      .filter((a) => (a.metadata as any)?.featureId === featureId)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }
 
   getForTypes(types: ArtifactType[]): Artifact[] {

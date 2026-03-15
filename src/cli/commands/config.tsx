@@ -3,13 +3,11 @@ import { Box, Text } from 'ink';
 import { z } from 'zod';
 import { colors } from '../utils/colors.js';
 import { loadConfig, saveConfig, getDefaultConfig } from '../../utils/config.js';
-import { formatAgentName } from '../utils/format.js';
-import { AgentRole } from '../../types.js';
 import { EXIT_CODES } from '../types.js';
 
 export const options = z.object({
   project: z.string().default(process.cwd()).describe('Project path'),
-  set: z.string().optional().describe('Set a configuration value (e.g. pipeline.maxRetries=3)'),
+  set: z.string().optional().describe('Set a configuration value (e.g. execution.maxRetries=3)'),
   reset: z.boolean().default(false).describe('Reset configuration to defaults'),
   json: z.boolean().default(false).describe('Output as JSON'),
 });
@@ -90,33 +88,24 @@ export default function ConfigCommand({ options }: Props): React.ReactElement {
       </Box>
       
       <Text> </Text>
-      <Text bold>Pipeline:</Text>
+      <Text bold>Execution:</Text>
       <Box marginLeft={2} flexDirection="column">
-        <Text>Max retries:    {config.pipeline.maxRetries}</Text>
-        <Text>Timeout (min):  {config.pipeline.timeoutMinutes}</Text>
-        <Text>Approvals:      {String(config.pipeline.requireApprovals)}</Text>
-        <Text>Skip steps:     {config.pipeline.skipSteps.join(', ') || 'none'}</Text>
+        <Text>Max retries:    {config.execution.maxRetries}</Text>
+        <Text>Timeout (min):  {config.execution.timeoutMinutes}</Text>
+        <Text>Default mode:   {config.execution.defaultMode}</Text>
       </Box>
       
       <Text> </Text>
-      <Text bold>Agents:</Text>
+      <Text bold>Personas:</Text>
       <Box marginLeft={2} flexDirection="column">
-        {Object.entries(config.agents).map(([role, override]) => {
-          const status = override.enabled ? 'enabled' : 'disabled';
-          const statusColor = override.enabled ? colors.success : colors.error;
-          const extra = override.maxTokenBudget ? ` (budget: ${override.maxTokenBudget})` : '';
-          return (
-            <Box key={role}>
-              <Text>{formatAgentName(role as AgentRole)}: </Text>
-              <Text color={statusColor}>{status}</Text>
-              <Text>{extra}</Text>
-            </Box>
-          );
-        })}
+        <Text>Divisions:      {config.personas.divisions.join(', ')}</Text>
+        <Text>Overrides:      {Object.keys(config.personas.overrides).length > 0 
+          ? Object.entries(config.personas.overrides).map(([k, v]) => `${k}=${v}`).join(', ')
+          : 'none'}</Text>
       </Box>
       
       <Text> </Text>
-      <Text color={colors.muted}>Use --set to modify values (e.g. cdm config --set pipeline.maxRetries=3)</Text>
+      <Text color={colors.muted}>Use --set to modify values (e.g. cdm config --set execution.maxRetries=3)</Text>
     </Box>
   );
 }

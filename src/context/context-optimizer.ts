@@ -1,57 +1,9 @@
-import { type Artifact, type AgentRole, AgentRole as Roles } from '../types';
-
 /**
- * Context optimizer — reduces token usage by 60-80% per agent prompt.
- *
- * Three strategies:
- *   1. Artifact summarization: Extract key decisions instead of dumping full content
- *   2. Role-aware filtering: Only inject analysis/profile sections relevant to each agent
- *   3. Token budgeting: Track and report estimated token usage
+ * Context optimizer — utilities for summarizing artifacts and extracting sections.
+ * Simplified for dynamic persona system.
  */
 
-// ─── Role → relevant context mapping ────────────────────────────────────────
-
-interface ContextSlice {
-  analysisSection: string[];
-  profileSections: string[];
-  needsFullArtifacts: boolean;
-}
-
-// Section names must match headings in .cdm/analysis/overview.md:
-//   ## Entry Points | ## Dependencies | ## Patterns | ## Testing | ## Module Dependencies
-// Section names must match headings in .cdm/analysis/codestyle.md (partial match, case-insensitive):
-//   ## Naming Conventions | ## Formatting | ## Import Style | ## TypeScript Usage |
-//   ## Error Handling | ## Architecture | ## Testing Conventions | ## API Conventions | ## Code Samples
-
-const ROLE_CONTEXT: Record<string, ContextSlice> = {
-  [Roles.PLANNER]: {
-    analysisSection: ['Entry Points', 'Dependencies'],
-    profileSections: ['Architecture'],
-    needsFullArtifacts: false,
-  },
-  [Roles.ARCHITECT]: {
-    analysisSection: ['Dependencies', 'Entry Points', 'Patterns', 'Module Dependencies'],
-    profileSections: ['Architecture', 'Import Style', 'TypeScript Usage', 'API Conventions'],
-    needsFullArtifacts: false,
-  },
-  [Roles.DEVELOPER]: {
-    analysisSection: ['Patterns', 'Module Dependencies'],
-    profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples'],
-    needsFullArtifacts: true,
-  },
-  [Roles.REVIEWER]: {
-    analysisSection: ['Patterns', 'Testing'],
-    profileSections: ['Naming Conventions', 'Import Style', 'Formatting', 'TypeScript Usage', 'Error Handling', 'Code Samples', 'Testing Conventions'],
-    needsFullArtifacts: true,
-  },
-  [Roles.OPERATOR]: {
-    analysisSection: ['Dependencies', 'Entry Points'],
-    profileSections: ['Architecture', 'API Conventions'],
-    needsFullArtifacts: false,
-  },
-};
-
-// ─── Artifact summarizer ────────────────────────────────────────────────────
+import { type Artifact } from '../types';
 
 export function summarizeArtifact(artifact: Artifact, maxLines: number = 15): string {
   const content = artifact.content ?? '';
@@ -100,9 +52,7 @@ export function summarizeArtifacts(artifacts: Artifact[]): string {
   return artifacts.map(a => summarizeArtifact(a)).join('\n\n');
 }
 
-// ─── Section extractor ──────────────────────────────────────────────────────
-
-function extractSections(markdown: string, sectionNames: string[]): string {
+export function extractSections(markdown: string, sectionNames: string[]): string {
   if (!markdown || sectionNames.length === 0) return '';
 
   const lines = markdown.split('\n');
@@ -124,7 +74,7 @@ function extractSections(markdown: string, sectionNames: string[]): string {
       const matches = sectionNames.some(s => {
         const n = name.toLowerCase();
         const t = s.toLowerCase();
-        return n === t || n.startsWith(t + ' ');
+        return n === t || n.startsWith(t + ' ') || n.includes(t);
       });
 
       if (matches) {
@@ -147,99 +97,33 @@ function extractSections(markdown: string, sectionNames: string[]): string {
   return result.join('\n');
 }
 
-// ─── Public API ─────────────────────────────────────────────────────────────
-
-export function optimizeAnalysisForRole(
-  fullAnalysis: string | null,
-  role: AgentRole,
-): string | null {
-  if (!fullAnalysis) return null;
-
-  const ctx = ROLE_CONTEXT[role];
-  if (!ctx) return fullAnalysis;
-
-  const filtered = extractSections(fullAnalysis, ctx.analysisSection);
-  return filtered.trim() || null;
-}
-
-export function optimizeProfileForRole(
-  fullProfile: string | null,
-  role: AgentRole,
-): string | null {
-  if (!fullProfile) return null;
-
-  const ctx = ROLE_CONTEXT[role];
-  if (!ctx) return fullProfile;
-
-  const filtered = extractSections(fullProfile, ctx.profileSections);
-  return filtered.trim() || null;
-}
-
-export function shouldPassFullArtifacts(role: AgentRole): boolean {
-  return ROLE_CONTEXT[role]?.needsFullArtifacts ?? false;
-}
-
-export function optimizeInputArtifacts(
-  artifacts: Artifact[],
-  role: AgentRole,
-): string {
-  if (artifacts.length === 0) return '';
-
-  if (shouldPassFullArtifacts(role)) {
-    const totalChars = artifacts.reduce((sum, a) => sum + (a.content?.length ?? 0), 0);
-    if (totalChars < 8000) {
-      return artifacts.map(a => `### ${a.name}\n\`\`\`\n${a.content}\n\`\`\``).join('\n\n');
-    }
-  }
-
-  return summarizeArtifacts(artifacts);
-}
-
-// ─── Token estimation ───────────────────────────────────────────────────────
-
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export interface TokenReport {
-  systemPrompt: number;
-  taskInstructions: number;
-  analysis: number;
-  profile: number;
-  artifacts: number;
-  outputFormat: number;
-  total: number;
-  savedVsFull: number;
-  savingsPercent: number;
+export function truncateContent(content: string, maxChars: number): string {
+  if (content.length <= maxChars) {
+    return content;
+  }
+
+  const truncated = content.slice(0, maxChars);
+  const lastNewline = truncated.lastIndexOf('\n');
+
+  if (lastNewline > maxChars * 0.8) {
+    return truncated.slice(0, lastNewline) + '\n\n... (truncated)';
+  }
+
+  return truncated + '\n\n... (truncated)';
 }
 
-export function buildTokenReport(
-  systemPrompt: string,
-  taskInstructions: string,
-  analysis: string | null,
-  profile: string | null,
-  artifactContext: string,
-  outputFormat: string,
-  fullAnalysis: string | null,
-  fullProfile: string | null,
-  fullArtifactContent: string,
-): TokenReport {
-  const sp = estimateTokens(systemPrompt);
-  const ti = estimateTokens(taskInstructions);
-  const an = estimateTokens(analysis ?? '');
-  const pr = estimateTokens(profile ?? '');
-  const ar = estimateTokens(artifactContext);
-  const of = estimateTokens(outputFormat);
-  const total = sp + ti + an + pr + ar + of;
+export function formatArtifactContext(artifacts: Artifact[], maxTotalChars: number = 8000): string {
+  if (artifacts.length === 0) return '';
 
-  const fullTotal = sp + ti
-    + estimateTokens(fullAnalysis ?? '')
-    + estimateTokens(fullProfile ?? '')
-    + estimateTokens(fullArtifactContent)
-    + of;
+  const totalChars = artifacts.reduce((sum, a) => sum + (a.content?.length ?? 0), 0);
 
-  const saved = fullTotal - total;
-  const pct = fullTotal > 0 ? Math.round((saved / fullTotal) * 100) : 0;
+  if (totalChars < maxTotalChars) {
+    return artifacts.map(a => `### ${a.name}\n\`\`\`\n${a.content}\n\`\`\``).join('\n\n');
+  }
 
-  return { systemPrompt: sp, taskInstructions: ti, analysis: an, profile: pr, artifacts: ar, outputFormat: of, total, savedVsFull: saved, savingsPercent: pct };
+  return summarizeArtifacts(artifacts);
 }

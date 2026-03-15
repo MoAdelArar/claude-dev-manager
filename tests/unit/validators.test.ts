@@ -1,20 +1,16 @@
 import { describe, it, expect } from 'bun:test';
 import {
   validateArtifact,
-  validateHandoff,
   validateFeatureDescription,
   areRequiredArtifactsPresent,
   hasBlockingIssues,
+  validatePersonaId,
 } from '../../src/utils/validators';
 import {
   Artifact,
   ArtifactType,
   ArtifactStatus,
   ReviewStatus,
-  AgentRole,
-  HandoffPayload,
-  StepResult,
-  StepStatus,
   Issue,
   IssueSeverity,
   IssueType,
@@ -28,7 +24,7 @@ function createTestArtifact(overrides: Partial<Artifact> = {}): Artifact {
     name: 'Test Requirements',
     description: 'Test requirements document',
     filePath: 'test/requirements.md',
-    createdBy: AgentRole.PLANNER,
+    createdBy: 'software-engineer',
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 1,
@@ -48,8 +44,8 @@ function createTestIssue(severity: IssueSeverity): Issue {
     severity,
     title: 'Test Issue',
     description: 'Test issue description',
-    reportedBy: AgentRole.REVIEWER,
-    step: 'step-1',
+    reportedBy: 'code-reviewer',
+    step: 'main',
     status: IssueStatus.OPEN,
     createdAt: new Date(),
   };
@@ -88,57 +84,10 @@ describe('Validators', () => {
       expect(errors.some((e) => e.field === 'type')).toBe(true);
     });
 
-    it('should return error for invalid creator role', () => {
-      const artifact = createTestArtifact({ createdBy: 'invalid_role' as AgentRole });
+    it('should return error for missing createdBy persona ID', () => {
+      const artifact = createTestArtifact({ createdBy: '' });
       const errors = validateArtifact(artifact);
       expect(errors.some((e) => e.field === 'createdBy')).toBe(true);
-    });
-  });
-
-  describe('validateHandoff', () => {
-    const validHandoff: HandoffPayload = {
-      fromAgent: AgentRole.PLANNER,
-      toAgent: AgentRole.ARCHITECT,
-      step: 'step-1',
-      context: 'Requirements complete, handing off for architecture design',
-      artifacts: [createTestArtifact()],
-      instructions: 'Please review requirements and create system architecture',
-      constraints: ['Follow scalability requirements'],
-    };
-
-    it('should return no errors for a valid handoff', () => {
-      const errors = validateHandoff(validHandoff);
-      expect(errors).toHaveLength(0);
-    });
-
-    it('should return error when handing off to same agent', () => {
-      const handoff = { ...validHandoff, toAgent: AgentRole.PLANNER };
-      const errors = validateHandoff(handoff);
-      expect(errors.some((e) => e.field === 'toAgent')).toBe(true);
-    });
-
-    it('should return error for missing context', () => {
-      const handoff = { ...validHandoff, context: '' };
-      const errors = validateHandoff(handoff);
-      expect(errors.some((e) => e.field === 'context')).toBe(true);
-    });
-
-    it('should return error for missing instructions', () => {
-      const handoff = { ...validHandoff, instructions: '' };
-      const errors = validateHandoff(handoff);
-      expect(errors.some((e) => e.field === 'instructions')).toBe(true);
-    });
-
-    it('should return error for invalid agent roles', () => {
-      const handoff = { ...validHandoff, fromAgent: 'invalid' as AgentRole };
-      const errors = validateHandoff(handoff);
-      expect(errors.some((e) => e.field === 'fromAgent')).toBe(true);
-    });
-
-    it('should return error for missing step', () => {
-      const handoff = { ...validHandoff, step: '' };
-      const errors = validateHandoff(handoff);
-      expect(errors.some((e) => e.field === 'step')).toBe(true);
     });
   });
 
@@ -187,48 +136,60 @@ describe('Validators', () => {
 
   describe('hasBlockingIssues', () => {
     it('should return true when critical issues exist', () => {
-      const stepResult: StepResult = {
-        stepIndex: 0,
-        agent: AgentRole.DEVELOPER,
-        skills: ['code-implementation'],
-        status: StepStatus.IN_PROGRESS,
-        startedAt: new Date(),
-        artifacts: [],
-        issues: [createTestIssue(IssueSeverity.CRITICAL)],
-        tokensUsed: 0,
-        durationMs: 0,
-      };
-      expect(hasBlockingIssues(stepResult)).toBe(true);
+      const issues = [createTestIssue(IssueSeverity.CRITICAL)];
+      expect(hasBlockingIssues(issues)).toBe(true);
     });
 
     it('should return true when high severity issues exist', () => {
-      const stepResult: StepResult = {
-        stepIndex: 0,
-        agent: AgentRole.DEVELOPER,
-        skills: ['code-implementation'],
-        status: StepStatus.IN_PROGRESS,
-        startedAt: new Date(),
-        artifacts: [],
-        issues: [createTestIssue(IssueSeverity.HIGH)],
-        tokensUsed: 0,
-        durationMs: 0,
-      };
-      expect(hasBlockingIssues(stepResult)).toBe(true);
+      const issues = [createTestIssue(IssueSeverity.HIGH)];
+      expect(hasBlockingIssues(issues)).toBe(true);
     });
 
     it('should return false when only low severity issues exist', () => {
-      const stepResult: StepResult = {
-        stepIndex: 0,
-        agent: AgentRole.DEVELOPER,
-        skills: ['code-implementation'],
-        status: StepStatus.IN_PROGRESS,
-        startedAt: new Date(),
-        artifacts: [],
-        issues: [createTestIssue(IssueSeverity.LOW)],
-        tokensUsed: 0,
-        durationMs: 0,
-      };
-      expect(hasBlockingIssues(stepResult)).toBe(false);
+      const issues = [createTestIssue(IssueSeverity.LOW)];
+      expect(hasBlockingIssues(issues)).toBe(false);
+    });
+
+    it('should return false for empty issues array', () => {
+      expect(hasBlockingIssues([])).toBe(false);
+    });
+
+    it('should return false when only medium severity issues exist', () => {
+      const issues = [createTestIssue(IssueSeverity.MEDIUM)];
+      expect(hasBlockingIssues(issues)).toBe(false);
+    });
+  });
+
+  describe('validatePersonaId', () => {
+    it('should return no errors for a valid persona ID', () => {
+      const errors = validatePersonaId('software-engineer');
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should return no errors for persona ID with numbers', () => {
+      const errors = validatePersonaId('senior-dev-2');
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should return error for empty persona ID', () => {
+      const errors = validatePersonaId('');
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors.some((e) => e.field === 'personaId')).toBe(true);
+    });
+
+    it('should return error for persona ID with uppercase', () => {
+      const errors = validatePersonaId('Software-Engineer');
+      expect(errors.some((e) => e.message.includes('lowercase'))).toBe(true);
+    });
+
+    it('should return error for persona ID with spaces', () => {
+      const errors = validatePersonaId('software engineer');
+      expect(errors.some((e) => e.field === 'personaId')).toBe(true);
+    });
+
+    it('should return error for persona ID with special characters', () => {
+      const errors = validatePersonaId('software_engineer');
+      expect(errors.some((e) => e.field === 'personaId')).toBe(true);
     });
   });
 });

@@ -1,12 +1,18 @@
+/**
+ * Configuration management for CDM.
+ * v3.0: Refactored for dynamic persona system.
+ */
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as yaml from 'yaml';
+import { type ProjectConfig, type CLIOptions, CloudProvider } from '../types';
 import {
-  type ProjectConfig,
-  type CLIOptions,
-  AgentRole,
-  CloudProvider,
-} from '../types';
+  type PersonasConfig,
+  type ExecutionConfig,
+  DEFAULT_PERSONAS_CONFIG,
+  DEFAULT_EXECUTION_CONFIG,
+} from '../personas/types';
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   language: 'auto',
@@ -25,7 +31,7 @@ const DEFAULT_CLI_OPTIONS: CLIOptions = {
   projectPath: process.cwd(),
   verbose: false,
   dryRun: false,
-  skipSteps: [],
+  review: false,
   maxBudget: 100000,
   interactive: true,
   outputFormat: 'text',
@@ -42,50 +48,10 @@ const CONFIG_FILE_NAMES = [
 
 export interface CDMConfig {
   project: ProjectConfig;
-  pipeline: PipelineConfig;
-  agents: AgentOverrides;
-  skills: SkillOverrides;
+  execution: ExecutionConfig;
+  personas: PersonasConfig;
   cli: Partial<CLIOptions>;
 }
-
-export interface PipelineConfig {
-  defaultTemplate: string;
-  skipSteps: string[];
-  maxRetries: number;
-  timeoutMinutes: number;
-  requireApprovals: boolean;
-  parallelExecution: boolean;
-}
-
-export interface AgentOverrides {
-  [key: string]: {
-    enabled: boolean;
-    maxTokenBudget?: number;
-    customInstructions?: string;
-  };
-}
-
-export interface SkillOverrides {
-  [skillId: string]: {
-    enabled: boolean;
-    customPromptAdditions?: string;
-  };
-}
-
-const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
-  defaultTemplate: 'auto',
-  skipSteps: [],
-  maxRetries: 2,
-  timeoutMinutes: 30,
-  requireApprovals: false,
-  parallelExecution: false,
-};
-
-const DEFAULT_AGENT_OVERRIDES: AgentOverrides = Object.fromEntries(
-  Object.values(AgentRole).map((role) => [role, { enabled: true }]),
-);
-
-const DEFAULT_SKILL_OVERRIDES: SkillOverrides = {};
 
 export function loadConfig(projectPath: string): CDMConfig {
   for (const fileName of CONFIG_FILE_NAMES) {
@@ -104,9 +70,8 @@ export function loadConfig(projectPath: string): CDMConfig {
 export function getDefaultConfig(): CDMConfig {
   return {
     project: { ...DEFAULT_PROJECT_CONFIG },
-    pipeline: { ...DEFAULT_PIPELINE_CONFIG },
-    agents: { ...DEFAULT_AGENT_OVERRIDES },
-    skills: { ...DEFAULT_SKILL_OVERRIDES },
+    execution: { ...DEFAULT_EXECUTION_CONFIG },
+    personas: { ...DEFAULT_PERSONAS_CONFIG },
     cli: { ...DEFAULT_CLI_OPTIONS },
   };
 }
@@ -114,9 +79,8 @@ export function getDefaultConfig(): CDMConfig {
 function mergeWithDefaults(partial: Partial<CDMConfig>): CDMConfig {
   return {
     project: { ...DEFAULT_PROJECT_CONFIG, ...partial.project },
-    pipeline: { ...DEFAULT_PIPELINE_CONFIG, ...partial.pipeline },
-    agents: { ...DEFAULT_AGENT_OVERRIDES, ...partial.agents },
-    skills: { ...DEFAULT_SKILL_OVERRIDES, ...partial.skills },
+    execution: { ...DEFAULT_EXECUTION_CONFIG, ...partial.execution },
+    personas: { ...DEFAULT_PERSONAS_CONFIG, ...partial.personas },
     cli: { ...DEFAULT_CLI_OPTIONS, ...partial.cli },
   };
 }
@@ -136,4 +100,12 @@ export function resolveOptions(
     ...config.cli,
     ...cliArgs,
   };
+}
+
+export function getDefaultCLIOptions(): CLIOptions {
+  return { ...DEFAULT_CLI_OPTIONS };
+}
+
+export function getDefaultProjectConfig(): ProjectConfig {
+  return { ...DEFAULT_PROJECT_CONFIG };
 }

@@ -1,27 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { z } from 'zod';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { colors } from '../utils/colors.js';
 import { Spinner } from '../components/Spinner.js';
-import { PipelineProgress } from '../components/PipelineProgress.js';
 import { EnhancedErrorDisplay } from '../components/EnhancedErrorDisplay.js';
 import { ProjectContext } from '../../orchestrator/context.js';
 import { ArtifactStore } from '../../workspace/artifact-store.js';
-import { PipelineOrchestrator, type PipelineOptions } from '../../orchestrator/pipeline.js';
+import { ClaudeCodeBridge } from '../../orchestrator/claude-code-bridge.js';
+import { DynamicExecutor } from '../../executor/dynamic-executor.js';
+import { PersonaCatalog, PersonaResolver, getCatalogIndexPath } from '../../personas/index.js';
 import { loadConfig } from '../../utils/config.js';
 import { addFileTransport } from '../../utils/logger.js';
 import { isRtkInstalled, getRtkGain } from '../../utils/rtk.js';
-import { formatAgentName, getAgentIcon, formatDuration, formatTokens } from '../utils/format.js';
-import { FeatureStatus, StepStatus, type Feature, type PipelineResult } from '../../types.js';
-import { EXIT_CODES, type PipelineStepUI } from '../types.js';
+import { formatDuration, formatTokens } from '../utils/format.js';
+import { FeatureStatus, type Feature, type DynamicResult } from '../../types.js';
+import { EXIT_CODES } from '../types.js';
 
 export const args = z.tuple([
   z.string().optional().describe('Feature ID to resume (uses most recent if omitted)'),
 ]);
 
 export const options = z.object({
-  skipSteps: z.string().default('').describe('Comma-separated step indices to skip'),
-  maxRetries: z.string().default('2').describe('Maximum retries per step'),
+  review: z.boolean().default(false).describe('Force a review pass'),
   project: z.string().default(process.cwd()).describe('Project path'),
   mode: z.string().default('claude-cli').describe('Execution mode: claude-cli or simulation'),
   model: z.string().optional().describe('Claude model to use'),
@@ -34,37 +36,20 @@ type Props = {
   options: z.infer<typeof options>;
 };
 
-type ResumePhase = 'loading' | 'running' | 'done' | 'error';
+type ResumePhase = 'loading' | 'resolving' | 'executing' | 'done' | 'error';
 
 interface ResumeState {
   phase: ResumePhase;
   feature?: Feature;
-  currentStep: number;
-  steps: PipelineStepUI[];
-  currentAgent?: string;
-  currentTask?: string;
-  result?: PipelineResult;
+  personaName?: string;
+  personaEmoji?: string;
+  result?: DynamicResult;
   error?: Error;
-}
-
-function findResumeStep(feature: Feature): number | null {
-  if (!feature.executionPlan?.steps) return null;
-  for (const step of feature.executionPlan.steps) {
-    const result = feature.stepResults.get(step.index);
-    if (!result || result.status === StepStatus.FAILED) {
-      return step.index;
-    }
-  }
-  return null;
 }
 
 export default function ResumeCommand({ args, options }: Props): React.ReactElement {
   const [featureId] = args;
-  const [state, setState] = useState<ResumeState>({
-    phase: 'loading',
-    currentStep: 0,
-    steps: [],
-  });
+  const [state, setState] = useState<ResumeState>({ phase: 'loading' });
 
   useEffect(() => {
     async function runResume(): Promise<void> {
@@ -86,7 +71,9 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
         } else {
           const allFeatures = context.getAllFeatures();
           feature = allFeatures.find((f) =>
-            f.status === FeatureStatus.ON_HOLD || f.status === FeatureStatus.IN_PROGRESS,
+            f.status === FeatureStatus.ON_HOLD ||
+            f.status === FeatureStatus.IN_PROGRESS ||
+            f.status === FeatureStatus.CANCELLED,
           ) ?? allFeatures[allFeatures.length - 1];
         }
 
@@ -94,98 +81,82 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
           throw new Error('No feature found to resume. Run `cdm start` first.');
         }
 
-        const nextStep = findResumeStep(feature);
-        if (nextStep === null) {
-          setState({
-            phase: 'done',
-            feature,
-            currentStep: 0,
-            steps: [],
-          });
+        if (feature.status === FeatureStatus.COMPLETED) {
+          setState({ phase: 'done', feature });
           return;
         }
 
-        const initialSteps: PipelineStepUI[] = feature.executionPlan?.steps.map((s) => {
-          const result = feature!.stepResults.get(s.index);
-          return {
-            index: s.index,
-            description: s.description,
-            status: result?.status ?? StepStatus.NOT_STARTED,
-            agent: s.agent,
-            skills: s.skills,
-          };
-        }) ?? [];
+        setState({ phase: 'resolving', feature });
 
-        setState({
-          phase: 'running',
-          feature,
-          currentStep: nextStep,
-          steps: initialSteps,
-        });
+        const catalogPath = getCatalogIndexPath(projectPath);
+        const catalog = PersonaCatalog.loadFromIndex(catalogPath);
 
-        const skipSteps = options.skipSteps
-          ? options.skipSteps.split(',').map((s) => s.trim())
-          : [];
+        if (!catalog || catalog.getCount() === 0) {
+          throw new Error('Persona catalog is empty. Run `cdm init` or `cdm personas update` first.');
+        }
 
-        const pipelineOptions: PipelineOptions = {
-          skipSteps,
-          maxRetries: parseInt(options.maxRetries, 10),
-          dryRun: false,
-          interactive: true,
-          startFromStep: nextStep,
-          onStepStart: (step) => {
-            setState((s) => ({
-              ...s,
-              currentStep: step.index,
-              steps: s.steps.map((st) =>
-                st.index === step.index ? { ...st, status: StepStatus.IN_PROGRESS } : st
-              ),
-            }));
+        const project = context.getProject();
+        const resolver = new PersonaResolver(config.personas);
+        const resolved = resolver.resolve(
+          feature.description,
+          project.config,
+          catalog,
+          {
+            config: config.personas,
+            forceReview: options.review,
           },
-          onStepComplete: (step) => {
-            setState((s) => ({
-              ...s,
-              steps: s.steps.map((st) =>
-                st.index === step.index ? { ...st, status: StepStatus.COMPLETED } : st
-              ),
-            }));
-          },
-          onAgentWork: (role, task) => {
-            setState((s) => ({
-              ...s,
-              currentAgent: formatAgentName(role),
-              currentTask: (task as { title?: string }).title ?? 'Processing...',
-            }));
-          },
-          onError: (stepIndex, error) => {
-            setState((s) => ({
-              ...s,
-              steps: s.steps.map((st) =>
-                st.index === stepIndex ? { ...st, status: StepStatus.FAILED } : st
-              ),
-            }));
-          },
-        };
+        );
 
-        const bridgeOptions = {
+        setState((s) => ({
+          ...s,
+          phase: 'executing',
+          personaName: resolved.primary.frontmatter.name,
+          personaEmoji: resolved.primary.frontmatter.emoji || '🤖',
+        }));
+
+        const analysisPath = path.join(projectPath, '.cdm', 'analysis', 'overview.md');
+        const codestylePath = path.join(projectPath, '.cdm', 'analysis', 'codestyle.md');
+        const analysisContent = fs.existsSync(analysisPath) ? fs.readFileSync(analysisPath, 'utf-8') : undefined;
+        const codeStyleContent = fs.existsSync(codestylePath) ? fs.readFileSync(codestylePath, 'utf-8') : undefined;
+
+        const bridge = new ClaudeCodeBridge({
+          projectPath,
           executionMode: options.mode as 'claude-cli' | 'simulation',
           model: options.model,
-        };
-        const orchestrator = new PipelineOrchestrator(context, artifactStore, config, bridgeOptions);
+        });
 
-        const result = await orchestrator.runFeaturePipeline(feature, pipelineOptions);
+        const executor = new DynamicExecutor(bridge, artifactStore, config.execution);
+
+        const result = await executor.execute(
+          {
+            projectPath,
+            feature,
+            resolved,
+            analysisContent,
+            codeStyleContent,
+          },
+          {
+            config: config.execution,
+            forceReview: options.review,
+          },
+        );
 
         setState((s) => ({
           ...s,
           phase: 'done',
           result,
         }));
+
+        if (!result.success) {
+          process.exitCode = EXIT_CODES.EXECUTION_FAILURE;
+        }
       } catch (error) {
         setState((s) => ({
           ...s,
           phase: 'error',
           error: error instanceof Error ? error : new Error(String(error)),
         }));
+        process.exitCode = EXIT_CODES.GENERAL_ERROR;
       }
     }
 
@@ -193,7 +164,6 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
   }, [featureId, options]);
 
   if (state.phase === 'error' && state.error) {
-    process.exitCode = EXIT_CODES.PIPELINE_FAILURE;
     return <EnhancedErrorDisplay error={state.error} showDetails={options.verbose} />;
   }
 
@@ -208,7 +178,7 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
   if (state.phase === 'done' && !state.result && state.feature) {
     return (
       <Box padding={1}>
-        <Text color={colors.warning}>This feature has already completed all steps.</Text>
+        <Text color={colors.warning}>This feature has already completed successfully.</Text>
       </Box>
     );
   }
@@ -220,30 +190,24 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Text bold color={colors.info}>🔄 Resuming Pipeline</Text>
+      <Text bold color={colors.info}>🔄 Resuming Feature</Text>
       {state.feature && (
         <Box marginLeft={2} flexDirection="column" marginBottom={1}>
           <Text>Feature: <Text bold>{state.feature.name}</Text></Text>
           <Text>Status:  {state.feature.status}</Text>
-          <Text>Resuming from: <Text bold>Step {state.currentStep}</Text></Text>
+          <Text>Description: <Text color={colors.muted}>{state.feature.description.slice(0, 80)}</Text></Text>
         </Box>
       )}
 
       {!isRtkInstalled() && (
-        <Text color={colors.muted}>Tip: Install rtk to reduce agent token usage by 60-90%: brew install rtk</Text>
+        <Text color={colors.muted}>Tip: Install rtk to reduce token usage by 60-90%: brew install rtk</Text>
       )}
 
-      <Text> </Text>
-      <Text color={colors.muted}>{'─'.repeat(60)}</Text>
-      <Text> </Text>
+      {state.phase === 'resolving' && <Spinner label="Resolving personas..." />}
 
-      {state.steps.length > 0 && (
-        <PipelineProgress steps={state.steps} currentStep={state.currentStep} />
-      )}
-
-      {state.phase === 'running' && state.currentAgent && (
-        <Box marginTop={1} marginLeft={2}>
-          <Spinner label={`${getAgentIcon(state.currentAgent)} ${state.currentAgent}: ${state.currentTask}`} />
+      {state.phase === 'executing' && (
+        <Box marginTop={1}>
+          <Spinner label={`${state.personaEmoji || '🤖'} ${state.personaName || 'Persona'} working...`} />
         </Box>
       )}
 
@@ -252,21 +216,19 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
           <Text color={colors.muted}>{'─'.repeat(60)}</Text>
           <Text> </Text>
           {state.result.success ? (
-            <Text bold color={colors.success}>✅ Pipeline Completed Successfully!</Text>
+            <Text bold color={colors.success}>✅ Execution Completed Successfully!</Text>
           ) : (
             <>
-              <Text bold color={colors.error}>❌ Pipeline Failed</Text>
-              <Text color={colors.muted}>  Tip: Run `cdm resume` to retry from the failed step.</Text>
+              <Text bold color={colors.error}>❌ Execution Failed</Text>
+              <Text color={colors.muted}>  Run `cdm resume` to retry again.</Text>
             </>
           )}
           <Text> </Text>
           <Text bold>Summary:</Text>
           <Box marginLeft={2} flexDirection="column">
             <Text>Execution mode:   <Text color={colors.info}>{state.result.executionMode}</Text></Text>
-            <Text>Template used:    <Text color={colors.info}>{state.result.templateUsed || 'auto-selected'}</Text></Text>
-            <Text>Steps completed:  <Text color={colors.success}>{state.result.stepsCompleted?.length ?? 0}</Text></Text>
-            <Text>Steps failed:     <Text color={colors.error}>{state.result.stepsFailed?.length ?? 0}</Text></Text>
-            <Text>Steps skipped:    <Text color={colors.warning}>{state.result.stepsSkipped?.length ?? 0}</Text></Text>
+            <Text>Primary persona:  <Text color={colors.info}>{state.result.personas.primary}</Text></Text>
+            <Text>Review pass:      <Text color={state.result.hadReviewPass ? colors.success : colors.muted}>{state.result.hadReviewPass ? 'Yes' : 'No'}</Text></Text>
             <Text>Artifacts:        <Text color={colors.info}>{state.result.artifacts.length}</Text></Text>
             <Text>Issues:           <Text color={colors.warning}>{state.result.issues.length}</Text></Text>
             <Text>Tokens used:      {formatTokens(state.result.totalTokensUsed)}</Text>
@@ -300,4 +262,4 @@ export default function ResumeCommand({ args, options }: Props): React.ReactElem
   );
 }
 
-export const description = 'Resume a failed or paused feature pipeline from its last incomplete step';
+export const description = 'Resume a failed or incomplete feature by re-running it';

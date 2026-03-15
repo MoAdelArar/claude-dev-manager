@@ -1,29 +1,46 @@
-import { AgentRole } from '../../types.js';
+/**
+ * Formatting utilities for CLI output.
+ * Refactored for dynamic persona system.
+ */
 
-export function formatAgentName(role: AgentRole | string): string {
-  return String(role).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+import type { AgentPersona } from '../../personas/types.js';
+
+export function formatPersonaName(id: string, name?: string): string {
+  if (name) {
+    return name;
+  }
+  return id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function getAgentIcon(role: AgentRole | string): string {
-  const icons: Record<string, string> = {
-    [AgentRole.PLANNER]: '📋',
-    [AgentRole.ARCHITECT]: '🏗️',
-    [AgentRole.DEVELOPER]: '💻',
-    [AgentRole.REVIEWER]: '🔍',
-    [AgentRole.OPERATOR]: '🚀',
-  };
-  return icons[role] ?? '🤖';
+export function getPersonaIcon(persona: AgentPersona | { emoji?: string; frontmatter?: { emoji?: string } }): string {
+  if ('frontmatter' in persona && persona.frontmatter?.emoji) {
+    return persona.frontmatter.emoji;
+  }
+  if ('emoji' in persona && persona.emoji) {
+    return persona.emoji;
+  }
+  return '🤖';
 }
 
 export function getCategoryIcon(category: string): string {
   const icons: Record<string, string> = {
+    engineering: '💻',
+    design: '🎨',
+    testing: '🧪',
+    product: '📋',
+    'project-management': '📊',
+    support: '🛟',
+    specialized: '⚡',
     planning: '📋',
-    design: '🏗️',
-    build: '💻',
+    build: '🏗️',
     review: '🔍',
     operations: '🚀',
   };
   return icons[category] ?? '📦';
+}
+
+export function getDivisionIcon(division: string): string {
+  return getCategoryIcon(division);
 }
 
 export function formatDuration(ms: number): string {
@@ -71,4 +88,27 @@ export function padEnd(str: string, length: number): string {
     return str;
   }
   return str + ' '.repeat(length - str.length);
+}
+
+export function formatPersonaList(
+  personas: Array<{ id: string; name: string; emoji?: string; division: string }>,
+): string {
+  const grouped = new Map<string, typeof personas>();
+
+  for (const persona of personas) {
+    const list = grouped.get(persona.division) || [];
+    list.push(persona);
+    grouped.set(persona.division, list);
+  }
+
+  const lines: string[] = [];
+
+  for (const [division, list] of grouped) {
+    lines.push(`\n${getDivisionIcon(division)} ${formatPersonaName(division)}`);
+    for (const p of list) {
+      lines.push(`  ${p.emoji || '🤖'} ${p.name} (${p.id})`);
+    }
+  }
+
+  return lines.join('\n');
 }

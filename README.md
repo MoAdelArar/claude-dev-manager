@@ -1,10 +1,10 @@
 # Claude Dev Manager (CDM)
 
-An AI-powered development management system that orchestrates **5 versatile agents** with **17 composable skills** through **adaptive pipeline templates** — from requirements to production deployment. CDM works on **new and existing projects**, respects your code style, and generates production-ready artifacts for **AWS, GCP, and Azure**.
+An AI-powered development manager that dynamically selects specialized **personas** from [140+ agent definitions](https://github.com/msitarzewski/agency-agents) to match your task. CDM analyzes your project, picks the best-fit persona(s), composes a rich prompt, and executes via Claude — producing versioned artifacts from a single intelligent session.
 
 Built with **React + Ink** for a rich terminal UI experience.
 
-Think of it as a virtual engineering team you manage through a single CLI.
+Think of it as hiring the right specialist for every task, automatically.
 
 ---
 
@@ -12,17 +12,14 @@ Think of it as a virtual engineering team you manage through a single CLI.
 
 - [How It Works](#how-it-works)
 - [Installation](#installation)
-- [Quick Start (5 minutes)](#quick-start-5-minutes)
+- [Quick Start](#quick-start)
 - [Using CDM on an Existing Project](#using-cdm-on-an-existing-project)
 - [Real-World Examples](#real-world-examples)
 - [All Commands](#all-commands)
-- [The 5 Agents](#the-5-agents)
-- [The 17 Skills](#the-17-skills)
-- [The 6 Pipeline Templates](#the-6-pipeline-templates)
+- [The Persona System](#the-persona-system)
 - [Configuration](#configuration)
-- [Cloud Provider Support](#cloud-provider-support)
 - [Development History & Tracking](#development-history--tracking)
-- [Claude Code Plugin](#claude-code-plugin)
+- [Claude Code Plugin (MCP)](#claude-code-plugin-mcp)
 - [Project Structure](#project-structure)
 - [Development](#development)
 - [License](#license)
@@ -36,21 +33,27 @@ You describe a feature
        ↓
 CDM analyzes your project (structure + code style)
        ↓
-Planner agent selects a template (or you pick one):
-  quick-fix · feature · full-feature · review-only · design-only · deploy
+PersonaResolver matches task to best-fit persona(s):
+  signals extracted → personas scored → primary + supporting selected
        ↓
-Agents execute steps with injected skills:
-  📋 Planner → 🏗️ Architect → 💻 Developer → 🔍 Reviewer → 🚀 Operator
+PromptComposer builds a single rich prompt:
+  persona identity + project context + task + self-review checklist
        ↓
-Each step produces versioned artifacts:
-  specs, schemas, code, tests, security reports, runbooks, etc.
+Claude executes in one session (+ optional review pass)
        ↓
-Everything is tracked: history, metrics, agent activity
+Artifacts parsed and stored:
+  specs, schemas, code, tests, security reports, etc.
+       ↓
+Everything is tracked: history, metrics, persona usage
 ```
 
 **Two execution modes:**
-- **`claude-cli`** (default) — Each agent runs as a real Claude Code subprocess with its specialized system prompt. This is the production mode.
-- **`simulation`** — Agents produce template-based output locally. Useful for testing pipelines without an API key.
+- **`claude-cli`** (default) — Claude Code executes with the composed persona prompt. This is the production mode.
+- **`simulation`** — Generates template-based output locally. Useful for testing without an API key.
+
+**Why personas over pipelines?**
+
+The old approach ran 5 fixed agents through a multi-step pipeline with handoffs. The new approach puts the right expertise into a single Claude session — fewer LLM calls, richer context, better results. A secondary review pass activates automatically for risky tasks (auth, payments, security).
 
 ---
 
@@ -68,7 +71,7 @@ npm link   # Makes 'cdm' available globally
 
 ### Optional: Install RTK (60-90% token savings)
 
-[RTK](https://github.com/rtk-ai/rtk) compresses CLI command outputs before they reach the agent's context window. When installed, CDM agent subprocesses automatically benefit from reduced token consumption.
+[RTK](https://github.com/rtk-ai/rtk) compresses CLI command outputs before they reach the agent's context window.
 
 ```bash
 # macOS (Homebrew)
@@ -83,24 +86,16 @@ winget install rtk-ai.rtk
 rtk init --global
 ```
 
-**Auto-install during npm install:**
-```bash
-CDM_AUTO_INSTALL_RTK=1 npm install
-```
-
-CDM will detect RTK automatically. If not installed, CDM works fine — you'll just see a tip suggesting installation.
+CDM detects RTK automatically. If not installed, CDM works fine — you'll just see a tip suggesting installation.
 
 **Verify it works:**
 
 ```bash
 cdm --version
-# 2.2.0
+# 3.0.0
 
-cdm agents
-# Lists all 5 agents with their skills
-
-cdm skills
-# Lists all 17 skills by category
+cdm personas list
+# Lists all available personas by division
 
 cdm dashboard
 # Shows project overview with stats, artifacts, and issues
@@ -108,7 +103,7 @@ cdm dashboard
 
 ---
 
-## Quick Start (5 minutes)
+## Quick Start
 
 ### Step 1: Initialize CDM in your project
 
@@ -117,11 +112,12 @@ cd ~/my-project
 cdm init
 ```
 
-This creates:
-- `cdm.config.yaml` — project configuration (auto-detects language, framework, cloud)
-- `.cdm/analysis/` — structured project analysis (overview, structure, code style, per-entity)
-- `.cdm/agents/` — instruction files for each of the 5 agents
-- `CLAUDE.md` — instructions for Claude Code
+This:
+- Creates `cdm.config.yaml` — project configuration (auto-detects language, framework, cloud)
+- Fetches 140+ personas from [agency-agents](https://github.com/msitarzewski/agency-agents)
+- Builds a searchable persona catalog in `.cdm/personas/catalog-index.json`
+- Generates `.cdm/analysis/` — structured project analysis
+- Creates `CLAUDE.md` — instructions for Claude Code
 
 ### Step 2: Review what CDM detected
 
@@ -137,14 +133,18 @@ Project:
   Framework:      express
   Test framework: jest
   Build tool:     tsc
-  Cloud provider: aws
 
-Pipeline:
+Execution:
   Max retries:    2
   Timeout (min):  30
+  Default mode:   claude-cli
+
+Personas:
+  Divisions:      engineering, design, testing, product, project-management, support, specialized
+  Overrides:      none
 ```
 
-### Step 3: Start a feature pipeline
+### Step 3: Start a feature
 
 **Option A: Interactive wizard (recommended for new users)**
 
@@ -152,10 +152,10 @@ Pipeline:
 cdm start
 ```
 
-The interactive wizard guides you through:
+The wizard guides you through:
 1. Feature description (free text)
-2. Template selection (quick-fix, feature, full-feature, etc.)
-3. Priority level (low, medium, high, critical)
+2. Priority level (low, medium, high, critical)
+3. Confirmation
 
 **Option B: Direct command**
 
@@ -163,26 +163,16 @@ The interactive wizard guides you through:
 cdm start "Add user authentication with JWT and refresh tokens"
 ```
 
-**Option C: Get a cost estimate first**
+**Option C: Preview persona selection first**
 
 ```bash
-cdm start "Add user authentication" --estimate
+cdm start "Add user authentication" --dry-run
 ```
 
-```
-📊 Pipeline Cost Estimate
-
-Template:     feature (auto-detected)
-Est. Tokens:  ~80,000 - 120,000
-Est. Cost:    ~$2.40 - $3.60
-Est. Time:    ~3 - 5 minutes
-Agents:       Planner → Architect → Developer → Reviewer
-```
-
-Watch the pipeline execute — the Planner selects the `feature` template automatically:
+Watch CDM resolve personas and execute:
 
 ```
-🚀 Claude Dev Manager v2.2.0
+🚀 Claude Dev Manager v3.0.0
 
 Project: my-project
 Language: typescript | Framework: express
@@ -190,27 +180,28 @@ Feature: Add user authentication with JWT and refresh tokens
 
 ──────────────────────────────────────────────────────────
 
-📋 Pipeline Execution
+🔍 Resolving personas...
+  Primary:    🔐 Security Engineer (engineering-security-engineer)
+  Supporting: 🧪 Reality Checker (testing-reality-checker)
+  Review:     enabled (risk signals: auth)
 
-✔ Step 0: Analyze requirements and acceptance criteria
-✔ Step 1: Design system architecture
-✔ Step 2: Implement feature with tests
-✔ Step 3: Review implementation quality
+💬 Executing with Security Engineer persona...
+✅ Main pass completed
+
+🔍 Running review pass...
+✅ Review pass completed
 
 ──────────────────────────────────────────────────────────
 
-✅ Pipeline Completed Successfully!
+✅ Execution Completed!
 
 Summary:
-  Execution mode:   claude-cli
-  Template used:    feature
-  Steps completed:  4
-  Steps failed:     0
-  Steps skipped:    0
-  Artifacts:        18
-  Issues:           3
-  Tokens used:      84,210
-  Duration:         3m 12s
+  Primary persona:  Security Engineer
+  Review pass:      yes
+  Artifacts:        12
+  Issues:           2
+  Tokens used:      42,100
+  Duration:         1m 48s
 ```
 
 ### Step 4: Explore what was produced
@@ -222,7 +213,7 @@ cdm artifacts
 # View a specific artifact
 cdm show "Security Report"
 
-# Check pipeline status
+# Check feature status
 cdm status
 
 # See the full development timeline
@@ -233,27 +224,19 @@ cdm history
 
 ## Using CDM on an Existing Project
 
-CDM is designed to work on already-built projects. When you run `cdm init` or `cdm analyze` on an existing codebase, it:
+CDM is designed to work on already-built projects. When you run `cdm init` or `cdm analyze`, it:
 
 1. **Scans your file structure** — builds a file map with every module's exports, imports, and descriptions
-2. **Profiles your code style** — detects naming conventions (kebab-case files, camelCase vars), architecture pattern (MVC, Clean, Feature-based), error handling strategy, import style, formatting, testing patterns, TypeScript strictness, and API patterns
-3. **Detects your stack** — language, framework, test runner, build tool, cloud provider (from SDK imports and config files)
+2. **Profiles your code style** — detects naming conventions, architecture patterns, error handling, import style, formatting, testing patterns, and TypeScript strictness
+3. **Detects your stack** — language, framework, test runner, build tool, cloud provider
 
-This produces structured analysis files that agents read instead of scanning every source file:
-
-| File | Purpose | Example detection |
-|---|---|---|
-| `.cdm/analysis/overview.md` | Stack, dependencies, patterns | "42 modules, Express + Prisma, 15K lines" |
-| `.cdm/analysis/codestyle.md` | Convention rules | "kebab-case files, Zod validation, describe/it tests, strict TS" |
-| `.cdm/analysis/structure.md` | Project file tree | Directory layout and module map |
-
-**Agents are instructed to follow your conventions.** If your project uses snake_case, Repository pattern, and Vitest — agents will match that.
+This context is injected into every persona prompt, so the output matches your project's conventions.
 
 ```bash
 # Analyze any existing project
 cdm analyze --project ~/existing-api
 
-# Then start a feature — agents respect your style
+# Then start a feature — personas respect your style
 cdm start "Add webhook delivery system" --project ~/existing-api
 ```
 
@@ -267,76 +250,79 @@ cdm start "Add webhook delivery system" --project ~/existing-api
 cdm start "Add Stripe payment integration with subscriptions and invoicing"
 ```
 
-The Planner selects `full-feature` (6 steps). What gets produced:
-- **Planner**: Requirements doc, user stories, acceptance criteria
-- **Architect**: API design, webhook architecture, data model, technology decision record
-- **Developer**: Implementation code, unit tests, integration tests
-- **Reviewer**: Code review report, security audit (PCI-DSS), performance analysis
-- **Operator**: CI/CD config, deployment plan, monitoring, runbook
+CDM detects payment/billing risk signals, selects a backend-focused persona with security review enabled. Produces: API design, implementation code, tests, security audit, and deployment config.
 
-### Example 2: Greenfield microservice
+### Example 2: Frontend component
 
 ```bash
-cdm init --project ~/new-service
-cdm config --set project.cloudProvider=gcp
-cdm start "Build a notification service supporting email, SMS, and push" --priority high
+cdm start "Build an accessible date picker component with keyboard navigation"
 ```
 
-### Example 3: Quick bug fix (skip design steps)
+CDM selects a frontend/UI persona. If accessibility signals are detected, an accessibility auditor persona is added to the review lens.
+
+### Example 3: Quick bug fix
 
 ```bash
-cdm start "Fix race condition in order processing" --template quick-fix
+cdm start "Fix race condition in order processing"
 ```
 
-The `quick-fix` template runs only 2 steps: Developer → Reviewer.
+CDM recognizes the "fix" action signal and selects a debugging-oriented persona.
 
-### Example 4: Resume a failed pipeline
+### Example 4: Force a specific persona
 
 ```bash
-# Pipeline failed at step 2? Fix the issue, then:
+cdm start "Redesign the API layer" --persona engineering-backend-architect
+```
+
+### Example 5: Force a review pass
+
+```bash
+cdm start "Add caching layer" --review
+```
+
+### Example 6: Resume a failed execution
+
+```bash
+# Last execution failed? Fix the issue, then:
 cdm resume
 
 # Or resume a specific feature:
 cdm resume abc123-feature-id
 ```
 
-### Example 5: Dry run (see what would happen)
+### Example 7: Dry run (preview persona selection)
 
 ```bash
 cdm start "Add real-time chat with WebSocket" --dry-run
 ```
 
 ```
-📋 DRY RUN — Pipeline will analyze task and show plan:
+📋 DRY RUN — Persona Resolution Preview
 
---- Execution Plan Summary ---
-Template: feature
-Steps:
-  0. planner [requirements-analysis]
-     Analyze requirements and acceptance criteria
-  1. architect [system-design] (depends on: 0)
-     Design system architecture
-  2. developer [code-implementation, test-writing] (depends on: 1)
-     Implement feature with tests
-  3. reviewer [code-review] (depends on: 2)
-     Review implementation quality
---- End Summary ---
+Task: Add real-time chat with WebSocket
+
+Signals:
+  Frameworks: websocket
+  Domains:    api, frontend
+  Actions:    build
+  Risks:      (none)
+
+Selected Personas:
+  Primary:    💻 Senior Developer (engineering-senior-developer)
+  Supporting: 🎨 Frontend Developer (engineering-frontend-developer)
+  Review:     none (no risk signals)
 ```
 
-### Example 6: Use simulation mode (no API key needed)
+### Example 8: Use simulation mode (no API key needed)
 
 ```bash
 cdm start "Add search API" --mode simulation
 ```
 
-### Example 7: Security and design audits
+### Example 9: Preview persona selection for a task
 
 ```bash
-# Review-only: run all review skills on existing code
-cdm start "Audit the payments module" --template review-only
-
-# Design-only: generate architecture without implementing
-cdm start "Design the event sourcing layer" --template design-only
+cdm personas resolve "Implement OAuth2 with PKCE flow"
 ```
 
 ---
@@ -345,7 +331,7 @@ cdm start "Design the event sourcing layer" --template design-only
 
 ### `cdm init`
 
-Initialize CDM in a project. Creates config, agent instruction files, project analysis, and code style profile.
+Initialize CDM in a project. Creates config, fetches personas, builds catalog, generates project analysis.
 
 ```bash
 cdm init                          # Current directory
@@ -358,58 +344,69 @@ Re-scan the project. Updates the structural analysis and code style profile. Run
 
 ```bash
 cdm analyze
-cdm analyze --json                # Also output raw JSON
-cdm analyze -o custom-path.md     # Custom output path
+cdm analyze --json
+cdm analyze -o custom-path.md
 ```
 
 ### `cdm start [description]`
 
-Start a new feature pipeline. Launches an **interactive wizard** if no description is provided.
+Start a new feature. Launches an **interactive wizard** if no description is provided.
 
 ```bash
-cdm start                                 # Interactive wizard
+cdm start                                   # Interactive wizard
 cdm start "Add user authentication"
 cdm start "Add OAuth2 login" --priority critical
-cdm start "Fix typo in header" --template quick-fix
-cdm start "Add caching layer" --skip-steps 0,1
 cdm start "Add search" --mode simulation
-cdm start "Add payments" --model claude-sonnet-4-20250514
-cdm start "Add API v2" --max-retries 3
-cdm start "Refactor auth" --dry-run
+cdm start "Fix auth" --persona engineering-security-engineer
+cdm start "Add payments" --review            # Force review pass
+cdm start "Add feature" --dry-run            # Preview personas
 cdm start "Quick fix" --no-interactive
-cdm start "Add feature" --estimate        # Show cost estimate only
+cdm start "Add feature" --estimate           # Show cost estimate
 ```
 
 | Option | Description | Default |
 |---|---|---|
-| `-t, --template` | `quick-fix`, `feature`, `full-feature`, `review-only`, `design-only`, `deploy` | auto-selected |
 | `-p, --priority` | `low`, `medium`, `high`, `critical` | `medium` |
-| `--skip-steps` | Comma-separated step indices to skip | none |
+| `--persona` | Force a specific primary persona by ID | auto-resolved |
+| `--review` | Force a review pass regardless of risk signals | `false` |
 | `--mode` | `claude-cli` or `simulation` | `claude-cli` |
 | `--model` | Claude model override | system default |
-| `--max-retries` | Retries per step | `2` |
-| `--dry-run` | Show plan without executing | `false` |
-| `--estimate` | Show cost/time estimate without running | `false` |
+| `--dry-run` | Show persona selection without executing | `false` |
+| `--estimate` | Show cost estimate without running | `false` |
 | `--no-interactive` | Skip prompts | `false` |
 | `-v, --verbose` | Debug output | `false` |
 | `--json` | Output result as JSON | `false` |
 
 ### `cdm resume [feature-id]`
 
-Resume a failed or paused pipeline from its last incomplete step.
+Resume a failed or incomplete feature execution.
 
 ```bash
 cdm resume                        # Resume most recent feature
 cdm resume abc-123                # Resume specific feature
+cdm resume --review               # Resume with review pass
 cdm resume --mode simulation      # Resume in simulation mode
+```
+
+### `cdm personas`
+
+Manage the persona catalog.
+
+```bash
+cdm personas list                             # List all personas
+cdm personas list --division engineering      # Filter by division
+cdm personas update                           # Re-fetch from GitHub
+cdm personas resolve "Add auth with JWT"      # Preview persona selection
+cdm personas info engineering-security-engineer  # Show persona details
 ```
 
 ### `cdm status`
 
-Show all features and their pipeline progress.
+Show all features and their execution status.
 
 ```bash
 cdm status
+cdm status --json
 ```
 
 ### `cdm show <target>`
@@ -429,39 +426,18 @@ List all produced artifacts with summaries by type and status.
 ```bash
 cdm artifacts
 cdm artifacts --type security_report
-```
-
-### `cdm agents`
-
-List the 5 agents and their compatible skills.
-
-### `cdm skills`
-
-List all 17 skills organized by category.
-
-```bash
-cdm skills
-cdm skills --category review
-```
-
-### `cdm pipeline`
-
-Show the 6 available pipeline templates.
-
-```bash
-cdm pipeline
-cdm pipeline --template feature   # Show template details
+cdm artifacts --json
 ```
 
 ### `cdm history`
 
-View the development timeline — every event, agent action, and metric.
+View the development timeline — every event, execution, and metric.
 
 ```bash
 cdm history                       # Summary + last 30 events
 cdm history --last 100            # Last 100 events
 cdm history --feature abc-123     # Filter by feature
-cdm history --export              # Export to .cdm/history/ as markdown + JSON
+cdm history --export              # Export to markdown + JSON
 ```
 
 ### `cdm config`
@@ -470,8 +446,8 @@ View or modify CDM configuration.
 
 ```bash
 cdm config                                      # View all
-cdm config --set project.cloudProvider=gcp       # Change cloud provider
-cdm config --set pipeline.maxRetries=3           # Change retries
+cdm config --set execution.maxRetries=3          # Change retries
+cdm config --set personas.overrides.react=engineering-frontend-developer
 cdm config --reset                               # Back to defaults
 ```
 
@@ -481,8 +457,7 @@ Display a TUI dashboard with project overview, stats, recent artifacts, and open
 
 ```bash
 cdm dashboard
-cdm dashboard --json                  # Output as JSON
-cdm dashboard --project ~/my-app      # Specific project
+cdm dashboard --json
 ```
 
 ### `cdm completion <shell>`
@@ -490,11 +465,6 @@ cdm dashboard --project ~/my-app      # Specific project
 Generate shell completion scripts for bash, zsh, or fish.
 
 ```bash
-cdm completion bash                   # Print bash completions
-cdm completion zsh                    # Print zsh completions
-cdm completion fish                   # Print fish completions
-
-# Install completions
 cdm completion bash > /etc/bash_completion.d/cdm
 cdm completion zsh > ~/.zsh/completions/_cdm
 cdm completion fish > ~/.config/fish/completions/cdm.fish
@@ -502,73 +472,78 @@ cdm completion fish > ~/.config/fish/completions/cdm.fish
 
 ---
 
-## The 5 Agents
+## The Persona System
 
-CDM uses 5 broad agents instead of many specialized ones. Each agent receives **skills** at runtime that define what it does for a given step.
+### How Persona Resolution Works
 
-| Agent | Role | Compatible Skills |
+When you run `cdm start "description"`, CDM:
+
+1. **Extracts signals** from your description: frameworks, domains, actions, risk indicators, keywords
+2. **Scores every persona** in the catalog against those signals + your project config
+3. **Selects a primary persona** (highest score) for the main execution
+4. **Selects supporting personas** (1-2 from different divisions if they score well)
+5. **Selects review personas** if risk signals are detected (auth, payments, encryption, PII)
+6. **Decides on a review pass** — automatic for risky tasks, or forced with `--review`
+
+### Signal Extraction
+
+| Signal Type | Examples | Weight |
 |---|---|---|
-| **Planner** | Planning, decomposition, classification | `requirements-analysis`, `task-decomposition` |
-| **Architect** | Design, structure, contracts | `system-design`, `api-design`, `data-modeling`, `ui-design` |
-| **Developer** | Implementation, testing, documentation | `code-implementation`, `test-writing`, `documentation` |
-| **Reviewer** | Quality assurance, audits | `code-review`, `security-audit`, `performance-analysis`, `accessibility-audit`, `test-validation` |
-| **Operator** | Deployment, infrastructure, monitoring | `ci-cd`, `deployment`, `monitoring` |
+| Frameworks | React, Vue, Express, Django, Flutter | +10 per match |
+| Domains | API, database, auth, frontend, mobile | +5 per match |
+| Actions | build, fix, refactor, test, deploy | +3 per match |
+| Project match | Language/framework from your config | +2 per match |
+| Keywords | General term matches from tags | +1 per match |
 
-Skills are injected at runtime via `agent.setActiveSkills(skills)`. An agent's prompt is composed from its base system prompt plus the active skill templates. This means fewer LLM calls with richer context.
+### Risk Signals (Trigger Review Pass)
 
----
+Tasks mentioning any of these automatically get a review pass:
+- **Auth**: authentication, password, login, JWT
+- **Payments**: payment, billing, credit card, Stripe
+- **Encryption**: encrypt, decrypt, TLS
+- **PII**: personal data, GDPR, HIPAA
+- **Sensitive**: secrets, tokens, credentials
 
-## The 17 Skills
+### Persona Divisions
 
-Skills are composable capabilities that can be assigned to agents. Each skill defines a prompt template and expected artifact types.
+Personas are organized by division, fetched from the [agency-agents](https://github.com/msitarzewski/agency-agents) repo:
 
-| Category | Skills |
+| Division | Examples |
 |---|---|
-| **Planning** (2) | `requirements-analysis`, `task-decomposition` |
-| **Design** (4) | `system-design`, `api-design`, `data-modeling`, `ui-design` |
-| **Build** (3) | `code-implementation`, `test-writing`, `documentation` |
-| **Review** (5) | `code-review`, `security-audit`, `performance-analysis`, `accessibility-audit`, `test-validation` |
-| **Operations** (3) | `ci-cd`, `deployment`, `monitoring` |
+| **Engineering** | Senior Developer, Frontend Developer, Backend Architect, Security Engineer, Code Reviewer |
+| **Design** | UX Designer, UI Designer, Brand Designer |
+| **Testing** | Reality Checker, Accessibility Auditor |
+| **Product** | Product Manager, Growth Strategist |
+| **Project Management** | Scrum Master, Technical Project Manager |
+| **Support** | Customer Support, Technical Writer |
+| **Specialized** | Data Engineer, ML Engineer, DevOps Engineer |
 
 ```bash
-# List all skills
-cdm skills
+# List all personas
+cdm personas list
 
-# Filter by category
-cdm skills --category design
+# Preview selection for a task
+cdm personas resolve "Build a React dashboard with charts"
+
+# See details of a specific persona
+cdm personas info engineering-frontend-developer
 ```
 
----
+### Config Overrides
 
-## The 6 Pipeline Templates
+Force specific personas for certain domains in `cdm.config.yaml`:
 
-Templates define how many steps to run and which agents/skills to use. The Planner agent auto-selects a template based on task analysis, or you can force one with `--template`.
-
-| Template | Steps | Flow | Best for |
-|---|---|---|---|
-| `quick-fix` | 2 | Developer → Reviewer | Bugs, typos, small tweaks |
-| `feature` | 4 | Planner → Architect → Developer → Reviewer | Standard feature work |
-| `full-feature` | 6 | feature + Security + Operator | Features needing security review and deployment |
-| `review-only` | 1 | Reviewer (multi-skill) | Audits and assessments |
-| `design-only` | 2 | Planner → Architect | Architecture spikes, RFCs |
-| `deploy` | 1 | Operator | Deploy existing code |
-
-Each step:
-- Produces **artifacts** (requirements, schemas, code, tests, reports, runbooks)
-- May identify **issues** (bugs, design flaws, security vulnerabilities)
-- Must pass **gate conditions** before the pipeline advances
-- Can be **retried** if it fails (up to `maxRetries`)
-- Can be **skipped** via `--skip-steps`
-
-```bash
-# See all templates
-cdm pipeline
-
-# See details for a specific template
-cdm pipeline --template full-feature
-
-# Force a specific template
-cdm start "Fix login bug" --template quick-fix
+```yaml
+personas:
+  divisions:
+    - engineering
+    - design
+    - testing
+    - product
+  overrides:
+    react: engineering-frontend-developer
+    security: engineering-security-engineer
+    database: engineering-backend-architect
 ```
 
 ---
@@ -579,67 +554,52 @@ CDM auto-detects your project setup during `cdm init`. Override anything in `cdm
 
 ```yaml
 project:
-  language: typescript        # Auto-detected from tsconfig.json, package.json, etc.
-  framework: express          # Auto-detected from dependencies
-  testFramework: jest         # Auto-detected from dependencies
-  buildTool: tsc              # Auto-detected from build scripts
-  cloudProvider: aws          # aws | gcp | azure | none
-  ciProvider: github-actions
+  language: typescript
+  framework: express
+  testFramework: jest
+  buildTool: tsc
+  cloudProvider: aws        # aws | gcp | azure | none
+  ciProvider: github
   deployTarget: docker
-  branchStrategy: gitflow
-  customInstructions: ""      # Free-text instructions injected into all agents
+  branchStrategy: main
+  customInstructions: ""    # Free-text instructions injected into every prompt
 
-pipeline:
+execution:
   maxRetries: 2
   timeoutMinutes: 30
-  requireApprovals: false
-  parallelExecution: false
+  defaultMode: claude-cli   # claude-cli | simulation
+  reviewPass: auto          # auto | always | never
 
-agents:
-  planner:
-    enabled: true
-  architect:
-    enabled: true
-  developer:
-    enabled: true
-  reviewer:
-    enabled: true
-    customInstructions: "Focus on GDPR and SOC2 compliance"
-  operator:
-    enabled: true
+personas:
+  source: github
+  repo: msitarzewski/agency-agents
+  branch: main
+  divisions:
+    - engineering
+    - design
+    - testing
+    - product
+    - project-management
+    - support
+    - specialized
+  autoResolve: true
+  overrides: {}
 ```
 
 **Quick config changes:**
 
 ```bash
-cdm config --set project.cloudProvider=gcp
-cdm config --set agents.reviewer.customInstructions="Focus on HIPAA"
-cdm config --set pipeline.maxRetries=5
+cdm config --set execution.maxRetries=5
+cdm config --set execution.defaultMode=simulation
+cdm config --set personas.overrides.react=engineering-frontend-developer
 cdm config --reset   # Back to defaults
 ```
 
 ---
 
-## Cloud Provider Support
-
-CDM generates production-grade infrastructure artifacts tailored to your cloud provider:
-
-| Artifact | AWS | GCP | Azure |
-|---|---|---|---|
-| **Monitoring** | CloudWatch + X-Ray | Cloud Monitoring + Trace | Application Insights |
-| **Alerting** | CloudWatch Alarms + SNS | Alerting Policies | Azure Alerts + Action Groups |
-| **Scaling** | ECS/EKS Auto Scaling, Karpenter | GKE HPA, Node Auto-Provisioning | AKS HPA, Cluster Autoscaler |
-| **Cost** | Cost Explorer, Savings Plans | Billing, Committed Use Discounts | Cost Management, Reservations |
-| **SLA/SLO** | Error budgets, burn-rate alerts | SLO Monitoring Service | App Insights SLOs |
-| **DR** | Multi-AZ, Cross-Region Aurora | Multi-Region GCS + SQL | Geo-Replication, Front Door |
-| **Performance** | k6/Artillery benchmarks | k6/Locust benchmarks | Azure Load Testing |
-| **Runbook** | ECS/EKS incident procedures | GKE operational guides | AKS operational guides |
-
----
-
 ## Development History & Tracking
 
-CDM automatically records a complete timeline of every development action:
+CDM records a complete timeline of every development action:
 
 ```bash
 cdm history
@@ -649,28 +609,29 @@ cdm history
 📜 Development History: my-project
 
 Summary:
-  Features:     3 (2 completed, 1 failed)
-  Steps run:    14
-  Artifacts:    52
-  Issues:       12 found, 8 resolved
-  Tokens:       184,210
-  Duration:     8m 30s
+  Features:      3 (2 completed, 1 failed)
+  Executions:    5
+  Artifacts:     28
+  Issues:        6 found, 4 resolved
+  Tokens:        98,400
+  Duration:      5m 12s
 
-Agent Activity:
-  Planner:   3 tasks, 12,100 tokens, 0.8s
-  Architect: 3 tasks, 18,400 tokens, 1.5s
-  Developer: 4 tasks, 89,200 tokens, 4.2s
-  Reviewer:  6 tasks, 42,100 tokens, 2.1s
-  Operator:  2 tasks, 22,410 tokens, 1.2s
+Persona Usage:
+  engineering-security-engineer:    2 tasks, 42,100 tokens
+  engineering-senior-developer:     2 tasks, 38,200 tokens
+  testing-reality-checker:          1 task,  18,100 tokens
 
 Timeline (last 30 events):
-  10:23:01 Pipeline started for "Add payments" (mode: claude-cli)
-  10:23:02 Step started: 0 — planner [requirements-analysis]
-  10:23:15 Step completed: 0 — 3 artifacts
+  10:23:01 Execution started for "Add payments" (persona: engineering-security-engineer)
+  10:23:02 Main pass started
+  10:24:50 Main pass completed — 8 artifacts
+  10:24:51 Review pass started (risk: auth, payment)
+  10:25:30 Review pass completed — 2 issues found
   ...
 ```
 
 Export to files:
+
 ```bash
 cdm history --export
 # Creates .cdm/history/development-history.md and .json
@@ -678,31 +639,15 @@ cdm history --export
 
 ---
 
-## Claude Code Plugin (built-in)
+## Claude Code Plugin (MCP)
 
-CDM includes a built-in MCP server — no separate plugin repo needed. Register it with Claude Code once:
+CDM includes a built-in MCP server. Register it with Claude Code:
 
 ```bash
-# One-command setup
 ./scripts/install.sh
 ```
 
-This registers the MCP server and installs slash commands. Restart Claude Code, then:
-
-```
-You: /cdm-init
-You: /cdm-start Add user authentication with OAuth2
-You: /cdm-status
-You: /cdm-history
-You: /cdm-skills
-You: /cdm-pipeline
-You: /cdm-artifacts
-You: /cdm-config
-```
-
-### Manual MCP registration
-
-If you prefer to register manually, add to `~/.claude/mcp_servers.json`:
+Or add manually to `~/.claude/mcp_servers.json`:
 
 ```json
 {
@@ -713,22 +658,22 @@ If you prefer to register manually, add to `~/.claude/mcp_servers.json`:
 }
 ```
 
-### MCP tools exposed
+### MCP Tools
 
 | Tool | CLI Equivalent |
 |---|---|
 | `cdm_init` | `cdm init` |
 | `cdm_analyze` | `cdm analyze` |
-| `cdm_start_pipeline` | `cdm start` |
-| `cdm_resume_pipeline` | `cdm resume` |
+| `cdm_start` | `cdm start` |
+| `cdm_resume` | `cdm resume` |
+| `cdm_list_personas` | `cdm personas list` |
+| `cdm_resolve_personas` | `cdm personas resolve` |
+| `cdm_update_personas` | `cdm personas update` |
+| `cdm_persona_info` | `cdm personas info` |
 | `cdm_get_status` | `cdm status` |
 | `cdm_list_artifacts` | `cdm artifacts` |
 | `cdm_show_artifact` | `cdm show` (artifact) |
 | `cdm_show_feature` | `cdm show` (feature) |
-| `cdm_list_agents` | `cdm agents` |
-| `cdm_list_skills` | `cdm skills` |
-| `cdm_get_skill` | `cdm skills --id <id>` |
-| `cdm_pipeline` | `cdm pipeline` |
 | `cdm_get_config` | `cdm config` |
 | `cdm_set_config` | `cdm config --set` |
 | `cdm_reset_config` | `cdm config --reset` |
@@ -743,31 +688,50 @@ If you prefer to register manually, add to `~/.claude/mcp_servers.json`:
 
 ```
 src/
-  cli/              # React + Ink terminal UI
-    commands/       # Command components (start, status, dashboard, etc.)
-    components/     # Reusable UI components (Spinner, Header, StatusBadge, etc.)
-    hooks/          # React hooks (useProject, useConfig, usePipeline, etc.)
-    utils/          # CLI utilities (colors, formatting, completions)
-    index.tsx       # Pastel CLI entry point
-  agents/           # 5 agents: planner, architect, developer, reviewer, operator
-  skills/           # 17 skill definitions + SkillRegistry
+  personas/         # Dynamic persona system
+    fetcher.ts      # Git sparse-checkout of agency-agents repo
+    catalog.ts      # Parse, index, and search personas
+    resolver.ts     # Signal extraction + scored persona matching
+    composer.ts     # Build prompts from personas + project context
+    types.ts        # Persona-specific type definitions
+  executor/         # DynamicExecutor (single/dual-pass execution)
+  orchestrator/     # ProjectContext, ClaudeCodeBridge
   analyzer/         # ProjectAnalyzer + CodeStyleProfiler
-  cloud/            # AWS, GCP, Azure infrastructure providers
-  communication/    # AgentMessageBus (typed events for inter-agent handoff)
-  context/          # Context optimizer for token reduction
-  orchestrator/     # PipelineOrchestrator, ProjectContext, Claude Code bridge
-  pipeline/         # templates.ts (6 templates), executor.ts (step runner)
+  context/          # Context optimizer for summarization
   tracker/          # Event log, metrics, token usage
   workspace/        # ArtifactStore (versioned CRUD in .cdm/)
-  utils/            # Config (YAML), logger, validators (Zod), cost-estimator
+  utils/            # Config (YAML), logger, validators (Zod)
+  cli/
+    commands/       # Pastel commands (start, personas, status, etc.)
+    components/     # Ink components (Spinner, Header, StatusBadge, etc.)
+    hooks/          # React hooks (useProject, useConfig, useArtifacts)
+    utils/          # CLI formatting, colors, completions
+    index.tsx       # Pastel CLI entry point
   types.ts          # All shared types — single source of truth
   mcp-server.ts     # MCP server entry point (Claude Code plugin)
-commands/           # Slash commands for Claude Code (/cdm-*)
 scripts/            # install.sh for Claude Code registration
-templates/          # Markdown artifact templates
 tests/
-  unit/             # Unit tests per module
+  unit/             # Unit tests (catalog, resolver, composer, validators)
   e2e/              # End-to-end tests (CLI invocation)
+```
+
+### .cdm/ Directory (per project)
+
+```
+.cdm/
+  project.json              # Project metadata
+  personas/
+    source/                 # Cloned agency-agents repo
+    catalog-index.json      # Searchable persona index
+  features/
+    {feature-id}.json       # Feature state + results
+  artifacts/
+    {artifact-id}.json      # Versioned artifact storage
+  analysis/
+    overview.md             # Project structure analysis
+    codestyle.md            # Code convention profile
+  history/
+    events.json             # Development timeline
 ```
 
 ---
@@ -777,7 +741,6 @@ tests/
 ```bash
 npm run dev          # Run CLI via tsx (no build needed)
 npm run build        # Compile TypeScript
-npm run build:bun    # Build with Bun (faster, if available)
 npm run mcp          # Start MCP server (for testing)
 npm test             # Run all tests with coverage (requires Bun)
 npm run test:unit    # Unit tests only
@@ -789,8 +752,9 @@ npm run typecheck    # Type-check without building
 
 **Tech Stack:**
 - **CLI Framework:** React + Ink (terminal UI) + Pastel (command routing)
-- **Type Safety:** TypeScript + Zod for runtime validation
-- **Build:** TypeScript compiler (tsc) or Bun
+- **Type Safety:** TypeScript strict + Zod for runtime validation
+- **Persona Source:** [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (140+ personas)
+- **Build:** TypeScript compiler (tsc)
 - **Testing:** Bun test runner
 
 ---

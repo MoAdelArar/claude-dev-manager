@@ -1,5 +1,9 @@
+/**
+ * CLI type definitions for CDM.
+ * Refactored for dynamic persona system.
+ */
+
 import type {
-  AgentRole,
   Feature,
   FeatureStatus,
   Artifact,
@@ -7,42 +11,17 @@ import type {
   Issue,
   PipelineResult,
   Project,
-  ExecutionStep,
-  StepStatus,
-  Skill,
-  SkillCategory,
 } from '../types.js';
 
-export type { AgentRole, Feature, FeatureStatus, Artifact, ArtifactType, Issue, PipelineResult, Project, ExecutionStep, StepStatus, Skill, SkillCategory };
+export type { Feature, FeatureStatus, Artifact, ArtifactType, Issue, PipelineResult, Project };
 
-export interface AgentInfo {
-  role: AgentRole;
-  icon: string;
-  title: string;
-  description: string;
-  skills: string[];
-}
-
-export interface SkillInfo {
+export interface PersonaInfo {
   id: string;
   name: string;
-  category: SkillCategory;
-  agents: string[];
-}
-
-export interface TemplateInfo {
-  id: string;
-  name: string;
+  emoji: string;
+  division: string;
   description: string;
-  steps: string[];
-}
-
-export interface PipelineStepUI {
-  index: number;
-  description: string;
-  status: StepStatus;
-  agent: AgentRole;
-  skills: string[];
+  tags: string[];
 }
 
 export interface CommandFlags {
@@ -53,28 +32,23 @@ export interface CommandFlags {
 
 export interface StartFlags extends CommandFlags {
   priority?: string;
-  template?: string;
-  skipSteps?: string;
-  maxRetries?: string;
+  persona?: string;
+  review?: boolean;
   dryRun?: boolean;
   interactive?: boolean;
   mode?: string;
   model?: string;
+  estimate?: boolean;
 }
 
 export interface ResumeFlags extends CommandFlags {
-  skipSteps?: string;
-  maxRetries?: string;
+  review?: boolean;
   mode?: string;
   model?: string;
 }
 
-export interface SkillsFlags extends CommandFlags {
-  category?: string;
-}
-
-export interface PipelineFlags extends CommandFlags {
-  template?: string;
+export interface PersonasFlags extends CommandFlags {
+  division?: string;
 }
 
 export interface ConfigFlags extends CommandFlags {
@@ -100,7 +74,7 @@ export const EXIT_CODES = {
   SUCCESS: 0,
   GENERAL_ERROR: 1,
   INVALID_ARGS: 2,
-  PIPELINE_FAILURE: 3,
+  EXECUTION_FAILURE: 3,
   USER_INTERRUPT: 130,
 } as const;
 

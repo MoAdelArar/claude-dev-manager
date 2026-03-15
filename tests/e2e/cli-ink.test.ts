@@ -1,77 +1,92 @@
 import { describe, it, expect } from 'bun:test';
 import { $ } from 'bun';
 
-describe('CDM CLI', () => {
+describe('CDM CLI Personas', () => {
   const CLI_SOURCE = './src/cli/index.tsx';
 
-  it('cdm agents outputs agent list', async () => {
-    const result = await $`bunx tsx ${CLI_SOURCE} agents --json`.quiet();
+  it('cdm personas --help shows available subcommands', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} personas --help`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
-    
-    const agents = JSON.parse(output);
-    expect(agents).toHaveLength(5);
-    expect(agents[0].role).toBe('planner');
-    expect(agents[1].role).toBe('architect');
-    expect(agents[2].role).toBe('developer');
-    expect(agents[3].role).toBe('reviewer');
-    expect(agents[4].role).toBe('operator');
+    expect(output).toContain('list');
+    expect(output).toContain('update');
+    expect(output).toContain('resolve');
+    expect(output).toContain('info');
   });
 
-  it('cdm agents --json outputs valid JSON', async () => {
-    const result = await $`bunx tsx ${CLI_SOURCE} agents --json`.quiet();
-    const output = result.stdout.toString();
-    
-    expect(() => JSON.parse(output)).not.toThrow();
-  });
-
-  it('cdm skills outputs skills list', async () => {
-    const result = await $`bunx tsx ${CLI_SOURCE} skills --json`.quiet();
+  it('cdm --help shows personas command', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} --help`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
-    
-    const skills = JSON.parse(output);
-    expect(skills.length).toBeGreaterThan(0);
-    expect(skills.some((s: { id: string }) => s.id === 'code-implementation')).toBe(true);
+    expect(output).toContain('personas');
+    expect(output).toContain('start');
+    expect(output).toContain('status');
+    expect(output).toContain('resume');
   });
 
-  it('cdm skills --category design filters correctly', async () => {
-    const result = await $`bunx tsx ${CLI_SOURCE} skills --category design --json`.quiet();
-    const output = result.stdout.toString();
+  it('cdm version outputs version number', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} --version`.quiet();
+    const output = result.stdout.toString().trim();
     
-    const skills = JSON.parse(output);
-    expect(skills.every((s: { category: string }) => s.category === 'design')).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(output).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it('cdm pipeline outputs templates', async () => {
-    const result = await $`bunx tsx ${CLI_SOURCE} pipeline --json`.quiet();
+  it('cdm start --help shows available options', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} start --help`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
-    
-    const templates = JSON.parse(output);
-    expect(templates).toHaveLength(6);
-    expect(templates.some((t: { id: string }) => t.id === 'quick-fix')).toBe(true);
-    expect(templates.some((t: { id: string }) => t.id === 'feature')).toBe(true);
-    expect(templates.some((t: { id: string }) => t.id === 'full-feature')).toBe(true);
+    expect(output).toContain('--dry-run');
+    expect(output).toContain('--mode');
+    expect(output).toContain('--persona');
+    expect(output).toContain('--review');
   });
 
-  it('cdm pipeline --template quick-fix shows template details', async () => {
-    const result = await $`bunx tsx ${CLI_SOURCE} pipeline --template quick-fix`.quiet();
+  it('cdm resume --help shows available options', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} resume --help`.quiet();
     const output = result.stdout.toString();
     
     expect(result.exitCode).toBe(0);
-    expect(output).toContain('Quick Fix');
+    expect(output).toContain('--review');
+    expect(output).toContain('--mode');
   });
 
-  it('cdm exits with code 2 for invalid template', async () => {
-    try {
-      await $`bunx tsx ${CLI_SOURCE} pipeline --template invalid-template`.quiet();
-    } catch (error: unknown) {
-      const exitError = error as { exitCode: number };
-      expect(exitError.exitCode).toBe(2);
-    }
+  it('cdm status --help shows available options', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} status --help`.quiet();
+    const output = result.stdout.toString();
+    
+    expect(result.exitCode).toBe(0);
+    expect(output).toContain('--project');
+    expect(output).toContain('--json');
+  });
+
+  it('cdm config --help shows available options', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} config --help`.quiet();
+    const output = result.stdout.toString();
+    
+    expect(result.exitCode).toBe(0);
+    expect(output).toContain('--set');
+    expect(output).toContain('--reset');
+  });
+
+  it('cdm artifacts --help shows available options', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} artifacts --help`.quiet();
+    const output = result.stdout.toString();
+    
+    expect(result.exitCode).toBe(0);
+    expect(output).toContain('--type');
+    expect(output).toContain('--json');
+  });
+
+  it('cdm history --help shows available options', async () => {
+    const result = await $`bunx tsx ${CLI_SOURCE} history --help`.quiet();
+    const output = result.stdout.toString();
+    
+    expect(result.exitCode).toBe(0);
+    expect(output).toContain('--last');
+    expect(output).toContain('--json');
   });
 });

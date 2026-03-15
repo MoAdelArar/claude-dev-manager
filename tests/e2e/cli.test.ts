@@ -47,8 +47,6 @@ describe('CDM CLI — End-to-End', () => {
     cleanDir(projectDir);
   });
 
-  // ── Help & Version ──────────────────────────────────────────────────────
-
   describe('help and version', () => {
     it('should print help when invoked with no arguments', () => {
       const out = cdm('--help', projectDir);
@@ -56,10 +54,9 @@ describe('CDM CLI — End-to-End', () => {
       expect(out).toContain('Claude Dev Manager');
       expect(out).toContain('start');
       expect(out).toContain('status');
-      expect(out).toContain('agents');
       expect(out).toContain('init');
       expect(out).toContain('artifacts');
-      expect(out).toContain('pipeline');
+      expect(out).toContain('personas');
       expect(out).toContain('resume');
       expect(out).toContain('show');
       expect(out).toContain('config');
@@ -71,36 +68,15 @@ describe('CDM CLI — End-to-End', () => {
     });
   });
 
-  // ── cdm agents ──────────────────────────────────────────────────────────
-
-  describe('cdm agents', () => {
-    it('should list all 5 agents with descriptions', () => {
-      const out = cdm('agents', projectDir);
-      expect(out).toContain('Agent Team');
-      expect(out).toContain('Planner');
-      expect(out).toContain('Architect');
-      expect(out).toContain('Developer');
-      expect(out).toContain('Reviewer');
-      expect(out).toContain('Operator');
+  describe('cdm personas', () => {
+    it('should show personas help', () => {
+      const out = cdm('personas --help', projectDir);
+      expect(out).toContain('list');
+      expect(out).toContain('update');
+      expect(out).toContain('resolve');
+      expect(out).toContain('info');
     });
   });
-
-  // ── cdm pipeline ────────────────────────────────────────────────────────
-
-  describe('cdm pipeline', () => {
-    it('should display pipeline templates', () => {
-      const out = cdm('pipeline', projectDir);
-      expect(out).toContain('Pipeline Templates');
-      expect(out).toContain('quick-fix');
-      expect(out).toContain('feature');
-      expect(out).toContain('full-feature');
-      expect(out).toContain('review-only');
-      expect(out).toContain('design-only');
-      expect(out).toContain('deploy');
-    });
-  });
-
-  // ── cdm init ────────────────────────────────────────────────────────────
 
   describe('cdm init', () => {
     it('should initialize CDM in a project directory', () => {
@@ -108,13 +84,10 @@ describe('CDM CLI — End-to-End', () => {
 
       expect(out).toContain('Initializing Claude Dev Manager');
       expect(out).toContain('cdm.config.yaml');
-      expect(out).toContain('agent instruction files');
       expect(out).toContain('CLAUDE.md');
-      expect(out).toContain('CDM initialized');
 
       expect(fs.existsSync(path.join(projectDir, 'cdm.config.yaml'))).toBe(true);
       expect(fs.existsSync(path.join(projectDir, 'CLAUDE.md'))).toBe(true);
-      expect(fs.existsSync(path.join(projectDir, '.cdm', 'agents'))).toBe(true);
       expect(fs.existsSync(path.join(projectDir, '.cdm'))).toBe(true);
     });
 
@@ -123,38 +96,23 @@ describe('CDM CLI — End-to-End', () => {
       expect(out).toContain('typescript');
     });
 
-    it('should generate agent instruction files for all agents', () => {
-      cdm(`init --project "${projectDir}"`, projectDir);
-      const agentsDir = path.join(projectDir, '.cdm', 'agents');
-      const files = fs.readdirSync(agentsDir);
-      expect(files.length).toBeGreaterThanOrEqual(5);
-      expect(files.some(f => f.includes('planner'))).toBe(true);
-      expect(files.some(f => f.includes('architect'))).toBe(true);
-      expect(files.some(f => f.includes('developer'))).toBe(true);
-      expect(files.some(f => f.includes('reviewer'))).toBe(true);
-      expect(files.some(f => f.includes('operator'))).toBe(true);
-    });
-
     it('should generate a valid cdm.config.yaml', () => {
       cdm(`init --project "${projectDir}"`, projectDir);
       const configPath = path.join(projectDir, 'cdm.config.yaml');
       const content = fs.readFileSync(configPath, 'utf-8');
       expect(content).toContain('project');
-      expect(content).toContain('pipeline');
-      expect(content).toContain('agents');
+      expect(content).toContain('execution');
+      expect(content).toContain('personas');
     });
 
-    it('should generate a CLAUDE.md with team structure', () => {
+    it('should generate a CLAUDE.md with persona information', () => {
       cdm(`init --project "${projectDir}"`, projectDir);
       const claudeMd = fs.readFileSync(path.join(projectDir, 'CLAUDE.md'), 'utf-8');
-      expect(claudeMd).toContain('Agent Team');
-      expect(claudeMd).toContain('Pipeline Templates');
+      expect(claudeMd).toContain('Claude Dev Manager');
       expect(claudeMd).toContain('Artifact Format');
       expect(claudeMd).toContain('ARTIFACT_START');
     });
   });
-
-  // ── cdm config ──────────────────────────────────────────────────────────
 
   describe('cdm config', () => {
     beforeEach(() => {
@@ -166,48 +124,40 @@ describe('CDM CLI — End-to-End', () => {
       expect(out).toContain('CDM Configuration');
       expect(out).toContain('Language');
       expect(out).toContain('Framework');
-      expect(out).toContain('Max retries');
-      expect(out).toContain('Agents');
     });
 
     it('should update a configuration value with --set', () => {
-      cdm(`config --set pipeline.maxRetries=5 --project "${projectDir}"`, projectDir);
+      cdm(`config --set execution.maxRetries=5 --project "${projectDir}"`, projectDir);
       const out = cdm(`config --project "${projectDir}"`, projectDir);
       expect(out).toContain('5');
     });
 
     it('should reset configuration to defaults with --reset', () => {
-      cdm(`config --set pipeline.maxRetries=99 --project "${projectDir}"`, projectDir);
+      cdm(`config --set execution.maxRetries=99 --project "${projectDir}"`, projectDir);
       cdm(`config --reset --project "${projectDir}"`, projectDir);
       const out = cdm(`config --project "${projectDir}"`, projectDir);
       expect(out).toContain('2');
     });
   });
 
-  // ── cdm start (dry run) ────────────────────────────────────────────────
-
   describe('cdm start --dry-run', () => {
-    it('should display pipeline plan without executing', () => {
+    it('should display execution plan without executing', () => {
       const out = cdm(`start "Add user authentication" --dry-run --project "${projectDir}"`, projectDir);
       expect(out).toContain('DRY RUN');
-      expect(out).toContain('Step');
-      expect(out).toContain('Execution Plan');
+      expect(out).toContain('Persona');
     });
 
-    it('should accept skip-steps option in dry run', () => {
+    it('should show persona resolution in dry run', () => {
       const out = cdm(
-        `start "Add feature" --dry-run --skip-steps 0,1 --project "${projectDir}"`,
+        `start "Add feature" --dry-run --project "${projectDir}"`,
         projectDir,
       );
       expect(out).toContain('DRY RUN');
-      expect(out).toContain('Pipeline Completed Successfully');
     });
   });
 
-  // ── cdm start (simulation mode, full pipeline) ─────────────────────────
-
   describe('cdm start (simulation mode)', () => {
-    it('should run the full pipeline end-to-end in simulation mode', () => {
+    it('should run the full execution in simulation mode', () => {
       const out = cdm(
         `start "Add user login" --mode simulation --no-interactive --project "${projectDir}"`,
         projectDir,
@@ -215,7 +165,6 @@ describe('CDM CLI — End-to-End', () => {
 
       expect(out).toContain('Claude Dev Manager');
       expect(out).toContain('Add user login');
-      expect(out).toContain('Pipeline Execution');
     }, 120_000);
 
     it('should produce artifacts visible via cdm artifacts', () => {
@@ -272,15 +221,13 @@ describe('CDM CLI — End-to-End', () => {
     }, 120_000);
   });
 
-  // ── cdm status ──────────────────────────────────────────────────────────
-
   describe('cdm status', () => {
     it('should show message when no features exist', () => {
       const out = cdm(`status --project "${projectDir}"`, projectDir);
       expect(out).toContain('No features found');
     });
 
-    it('should display features after a pipeline run', () => {
+    it('should display features after an execution', () => {
       cdm(
         `start "Dashboard feature" --mode simulation --no-interactive --project "${projectDir}"`,
         projectDir,
@@ -290,12 +237,9 @@ describe('CDM CLI — End-to-End', () => {
       expect(out).toContain('Feature Status');
       expect(out).toContain('Dashboard feature');
       expect(out).toMatch(/Status:\s+\w+/);
-      expect(out).toMatch(/Step:/);
       expect(out).toMatch(/Artifacts:\s+\d+/);
     }, 120_000);
   });
-
-  // ── cdm show ────────────────────────────────────────────────────────────
 
   describe('cdm show', () => {
     it('should show feature details by ID', () => {
@@ -321,16 +265,12 @@ describe('CDM CLI — End-to-End', () => {
     });
   });
 
-  // ── cdm artifacts ───────────────────────────────────────────────────────
-
   describe('cdm artifacts', () => {
     it('should show empty message when no artifacts exist', () => {
       const out = cdm(`artifacts --project "${projectDir}"`, projectDir);
       expect(out).toContain('No artifacts yet');
     });
   });
-
-  // ── Multiple features ──────────────────────────────────────────────────
 
   describe('multiple features', () => {
     it('should track multiple features independently', () => {

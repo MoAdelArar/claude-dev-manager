@@ -28,7 +28,11 @@ describe('useProject', () => {
       id: 'feature-1',
       name: 'Test Feature',
       status: 'in_progress',
-      currentStep: 'step-1',
+      personas: {
+        primary: { id: 'engineering-senior-developer', name: 'Senior Developer' },
+        supporting: [],
+        reviewLens: [],
+      },
     },
   ];
 
@@ -37,10 +41,14 @@ describe('useProject', () => {
       language: 'typescript',
       framework: 'node',
     },
-    pipeline: {
+    execution: {
       maxRetries: 2,
+      defaultMode: 'claude-cli',
     },
-    agents: {},
+    personas: {
+      divisions: ['engineering', 'testing'],
+      overrides: {},
+    },
   };
 
   const mockGetProject = mock(() => mockProject);
@@ -81,5 +89,18 @@ describe('useProject', () => {
     const emptyFeaturesMock = mock(() => [] as unknown[]);
     const features = emptyFeaturesMock();
     expect(features).toHaveLength(0);
+  });
+
+  it('should include personas in feature data', () => {
+    const features = mockGetAllFeatures();
+    expect(features[0].personas).toBeDefined();
+    expect(features[0].personas.primary).toBeDefined();
+  });
+
+  it('should have correct config sections', () => {
+    const config = mockLoadConfig('/test/path');
+    expect(config.project).toBeDefined();
+    expect(config.execution).toBeDefined();
+    expect(config.personas).toBeDefined();
   });
 });

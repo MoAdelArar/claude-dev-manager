@@ -3,11 +3,11 @@ import { ProjectContext } from '../../orchestrator/context.js';
 import { ArtifactStore } from '../../workspace/artifact-store.js';
 import { DevelopmentTracker } from '../../tracker/development-tracker.js';
 import { loadConfig, type CDMConfig } from '../../utils/config.js';
-import type { Project, Artifact, Issue, FeatureStatus, TrackingEvent } from '../../types.js';
+import type { Project, Artifact, Issue, FeatureStatus, TrackingEvent, TrackingEventType } from '../../types.js';
 
 export interface WeekStats {
   featuresCreated: number;
-  pipelinesRun: number;
+  executionsRun: number;
   tokensUsed: number;
   successRate: number;
 }
@@ -16,8 +16,8 @@ export interface ActiveFeature {
   id: string;
   name: string;
   status: FeatureStatus;
-  currentStep: number;
-  totalSteps: number;
+  currentStep: string;
+  primaryPersona?: string;
   createdAt: Date;
 }
 
@@ -90,37 +90,37 @@ export function useDashboardData(projectPath: string): UseDashboardDataResult {
       );
 
       const history = tracker.getEvents();
-      const pipelineCompletedEvents = history.filter(
+      const executionCompletedEvents = history.filter(
         (e: TrackingEvent) =>
-          e.type === 'pipeline_completed' &&
+          e.type === ('EXECUTION_COMPLETED' as TrackingEventType) &&
           new Date(e.timestamp) >= weekStart
       );
 
-      const pipelineFailedEvents = history.filter(
+      const executionFailedEvents = history.filter(
         (e: TrackingEvent) =>
-          e.type === 'pipeline_failed' &&
+          e.type === ('EXECUTION_FAILED' as TrackingEventType) &&
           new Date(e.timestamp) >= weekStart
       );
 
-      const totalPipelines = pipelineCompletedEvents.length + pipelineFailedEvents.length;
+      const totalExecutions = executionCompletedEvents.length + executionFailedEvents.length;
 
       let tokensThisWeek = 0;
-      for (const event of pipelineCompletedEvents) {
+      for (const event of executionCompletedEvents) {
         const eventData = event as TrackingEvent;
         tokensThisWeek += eventData.tokensUsed ?? 0;
       }
-      for (const event of pipelineFailedEvents) {
+      for (const event of executionFailedEvents) {
         const eventData = event as TrackingEvent;
         tokensThisWeek += eventData.tokensUsed ?? 0;
       }
 
       const weekStats: WeekStats = {
         featuresCreated: featuresThisWeek.length,
-        pipelinesRun: totalPipelines,
+        executionsRun: totalExecutions,
         tokensUsed: tokensThisWeek,
         successRate:
-          totalPipelines > 0
-            ? Math.round((pipelineCompletedEvents.length / totalPipelines) * 100)
+          totalExecutions > 0
+            ? Math.round((executionCompletedEvents.length / totalExecutions) * 100)
             : 0,
       };
 
@@ -131,8 +131,8 @@ export function useDashboardData(projectPath: string): UseDashboardDataResult {
           id: f.id,
           name: f.name,
           status: f.status,
-          currentStep: f.currentStepIndex ?? 0,
-          totalSteps: f.executionPlan?.steps?.length ?? 0,
+          currentStep: f.currentStep ?? 'pending',
+          primaryPersona: f.personas?.primary,
           createdAt: new Date(f.createdAt),
         }));
 
