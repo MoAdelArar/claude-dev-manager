@@ -1,6 +1,6 @@
 {
   "name": "claude-dev-manager",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "AI-powered development manager with dynamic persona selection from 140+ specialized agents, powered by Claude Code",
   "type": "module",
   "main": "dist/tui/index.js",
