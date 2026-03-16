@@ -1,5 +1,5 @@
-import { CloudProvider } from '../types';
-import { type CloudProviderAdapter, type CloudProviderProfile, type NFRArtifacts, type NFRContext } from './providers';
+import { CloudProvider } from '../types.js';
+import { type CloudProviderAdapter, type CloudProviderProfile, type NFRArtifacts, type NFRContext } from './providers.js';
 
 const AWS_PROFILE: CloudProviderProfile = {
   name: 'Amazon Web Services',

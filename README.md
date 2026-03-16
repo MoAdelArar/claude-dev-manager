@@ -60,14 +60,20 @@ The old approach ran 5 fixed agents through a multi-step pipeline with handoffs.
 ## Installation
 
 ```bash
+npm install -g claude-dev-manager
+```
+
+**Requirements:** Node.js >= 20
+
+### From Source (Development)
+
+```bash
 git clone https://github.com/MoAdelArar/claude-dev-manager.git
 cd claude-dev-manager
 npm install
 npm run build
-npm link   # Makes 'cdm' available globally
+npm link
 ```
-
-**Requirements:** Node.js >= 20
 
 ### Optional: Install RTK (60-90% token savings)
 
@@ -753,7 +759,6 @@ npm run typecheck    # Type-check without building
 **Tech Stack:**
 - **CLI Framework:** React + Ink (terminal UI) + Pastel (command routing)
 - **Type Safety:** TypeScript strict + Zod for runtime validation
-- **Persona Source:** [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (140+ personas)
 - **Build:** TypeScript compiler (tsc)
 - **Testing:** Bun test runner
 

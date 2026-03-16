@@ -11,8 +11,8 @@ import {
   CloudProvider,
   type Artifact,
   type Issue,
-} from '../types';
-import logger from '../utils/logger';
+} from '../types.js';
+import logger from '../utils/logger.js';
 
 export class ProjectContext {
   private project: Project;

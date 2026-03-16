@@ -11,16 +11,16 @@ import {
   type Artifact,
   type Issue,
   FeatureStatus,
-} from '../types';
+} from '../types.js';
 import {
   type ResolvedPersonas,
   type ExecutionConfig,
   DEFAULT_EXECUTION_CONFIG,
-} from '../personas/types';
-import { PromptComposer, type ComposerContext } from '../personas/composer';
-import { type ClaudeCodeBridge } from '../orchestrator/claude-code-bridge';
-import { type ArtifactStore } from '../workspace/artifact-store';
-import logger from '../utils/logger';
+} from '../personas/types.js';
+import { PromptComposer, type ComposerContext } from '../personas/composer.js';
+import { type ClaudeCodeBridge } from '../orchestrator/claude-code-bridge.js';
+import { type ArtifactStore } from '../workspace/artifact-store.js';
+import logger from '../utils/logger.js';
 
 export interface ExecutorOptions {
   config: Partial<ExecutionConfig>;

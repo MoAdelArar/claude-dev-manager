@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import logger from '../utils/logger';
+import logger from '../utils/logger.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

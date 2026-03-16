@@ -8,7 +8,7 @@ import {
   ArtifactType,
   type Issue,
   IssueSeverity,
-} from '../types';
+} from '../types.js';
 
 export class ValidationError extends Error {
   constructor(

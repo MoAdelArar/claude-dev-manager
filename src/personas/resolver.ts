@@ -2,7 +2,7 @@
  * PersonaResolver - Matches task descriptions to the best-fit personas.
  */
 
-import { type PersonaCatalog } from './catalog';
+import { type PersonaCatalog } from './catalog.js';
 import {
   type AgentPersona,
   type ResolvedPersonas,
@@ -10,8 +10,8 @@ import {
   type PersonaMatchScore,
   type SignalExtraction,
   DEFAULT_PERSONAS_CONFIG,
-} from './types';
-import { type ProjectConfig } from '../types';
+} from './types.js';
+import { type ProjectConfig } from '../types.js';
 
 export interface ResolverOptions {
   config: Partial<PersonasConfig>;

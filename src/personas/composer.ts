@@ -2,8 +2,8 @@
  * PromptComposer - Builds the final Claude prompt from resolved personas.
  */
 
-import { type ResolvedPersonas, type AgentPersona } from './types';
-import { type ProjectConfig } from '../types';
+import { type ResolvedPersonas, type AgentPersona } from './types.js';
+import { type ProjectConfig } from '../types.js';
 
 export interface ComposerContext {
   projectConfig: ProjectConfig;

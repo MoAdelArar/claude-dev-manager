@@ -15,10 +15,10 @@ import {
   IssueType,
   IssueSeverity,
   IssueStatus,
-} from '../types';
-import logger from '../utils/logger';
+} from '../types.js';
+import logger from '../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
-import { isRtkInstalled } from '../utils/rtk';
+import { isRtkInstalled } from '../utils/rtk.js';
 
 export type ExecutionMode = 'claude-cli' | 'simulation';
 

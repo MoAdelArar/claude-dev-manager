@@ -3,7 +3,7 @@
  * Simplified for dynamic persona system.
  */
 
-import { type Artifact } from '../types';
+import { type Artifact } from '../types.js';
 
 export function summarizeArtifact(artifact: Artifact, maxLines: number = 15): string {
   const content = artifact.content ?? '';

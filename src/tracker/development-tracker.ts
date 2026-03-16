@@ -13,8 +13,8 @@ import {
   type Feature,
   type DynamicResult,
   TrackingEventType,
-} from '../types';
-import logger from '../utils/logger';
+} from '../types.js';
+import logger from '../utils/logger.js';
 
 export class DevelopmentTracker {
   private events: TrackingEvent[] = [];

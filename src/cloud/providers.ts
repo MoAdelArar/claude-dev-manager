@@ -1,4 +1,4 @@
-import { type CloudProvider } from '../types';
+import { type CloudProvider } from '../types.js';
 
 export interface CloudService {
   compute: string[];

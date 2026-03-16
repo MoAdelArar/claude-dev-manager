@@ -6,13 +6,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as yaml from 'yaml';
-import { type ProjectConfig, type CLIOptions, CloudProvider } from '../types';
+import { type ProjectConfig, type CLIOptions, CloudProvider } from '../types.js';
 import {
   type PersonasConfig,
   type ExecutionConfig,
   DEFAULT_PERSONAS_CONFIG,
   DEFAULT_EXECUTION_CONFIG,
-} from '../personas/types';
+} from '../personas/types.js';
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   language: 'auto',

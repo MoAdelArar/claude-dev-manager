@@ -1,8 +1,8 @@
-import { CloudProvider } from '../types';
-import { type CloudProviderAdapter, type NFRArtifacts, type NFRContext } from './providers';
-import { AWSProvider } from './aws';
-import { GCPProvider } from './gcp';
-import { AzureProvider } from './azure';
+import { CloudProvider } from '../types.js';
+import { type CloudProviderAdapter, type NFRArtifacts, type NFRContext } from './providers.js';
+import { AWSProvider } from './aws.js';
+import { GCPProvider } from './gcp.js';
+import { AzureProvider } from './azure.js';
 
 const PROVIDERS: Record<string, () => CloudProviderAdapter> = {
   [CloudProvider.AWS]: () => new AWSProvider(),
@@ -27,7 +27,7 @@ export function generateMultiCloudNFR(ctx: NFRContext): Record<string, NFRArtifa
   return result;
 }
 
-export type { CloudProviderAdapter, NFRArtifacts, NFRContext } from './providers';
-export { AWSProvider } from './aws';
-export { GCPProvider } from './gcp';
-export { AzureProvider } from './azure';
+export type { CloudProviderAdapter, NFRArtifacts, NFRContext } from './providers.js';
+export { AWSProvider } from './aws.js';
+export { GCPProvider } from './gcp.js';
+export { AzureProvider } from './azure.js';

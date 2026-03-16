@@ -9,8 +9,8 @@ import {
   type AgentPersona,
   type PersonaCatalogData,
   type PersonaFrontmatter,
-} from './types';
-import logger from '../utils/logger';
+} from './types.js';
+import logger from '../utils/logger.js';
 
 export class PersonaCatalog {
   private personas: Map<string, AgentPersona> = new Map();

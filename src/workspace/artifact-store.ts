@@ -11,8 +11,8 @@ import {
   type ArtifactType,
   type ArtifactStatus,
   type ReviewStatus,
-} from '../types';
-import logger from '../utils/logger';
+} from '../types.js';
+import logger from '../utils/logger.js';
 
 export class ArtifactStore {
   private artifacts: Map<string, Artifact> = new Map();

@@ -6,8 +6,8 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { type PersonasConfig, DEFAULT_PERSONAS_CONFIG } from './types';
-import logger from '../utils/logger';
+import { type PersonasConfig, DEFAULT_PERSONAS_CONFIG } from './types.js';
+import logger from '../utils/logger.js';
 
 export interface FetchResult {
   success: boolean;
