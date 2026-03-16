@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-03-16
+
+### Added
+
+- **New Terminal User Interface (TUI)**: Complete rewrite of the CLI as an interactive terminal application
+- **Interactive Tab Completion**: Press Tab to cycle through command suggestions with visual highlighting
+- **Cross-Platform Keyboard Support**: Full keyboard shortcut support for macOS, Windows, and Linux
+  - Word navigation: Option/Ctrl + Arrow keys
+  - Word deletion: Option/Ctrl + Backspace/Delete
+  - Line editing: Ctrl+A (start), Ctrl+E (end), Ctrl+U (clear), Ctrl+K (kill to end)
+- **Command History**: Navigate previous commands with Up/Down arrows
+- **Slash Commands**: `/help`, `/init`, `/status`, `/analyze`, `/personas`, `/artifacts`, `/history`, `/config`, `/clear`, `/exit`
+- **Real-time Status Display**: Visual indicators for execution state (ready, executing, streaming, error)
+- **Message Bubbles**: Color-coded chat-style display for user, assistant, system, and error messages
+
+### Changed
+
+- **Entry Point**: `cdm` now launches the TUI directly (no subcommands required)
+- **Architecture**: Migrated from React/Ink to pure Node.js with raw terminal control for better responsiveness
+- **Input Handling**: Custom readline implementation with raw mode for precise keyboard control
+
+### Removed
+
+- **CLI Subcommands**: Traditional CLI interface replaced by TUI with slash commands
+
 ## [2.2.0] - 2026-03-14
 
 ### Added
