@@ -103,6 +103,103 @@ export class ClaudeCodeBridge {
     }
   }
 
+  async executePromptStreaming(
+    prompt: string,
+    options: ExecutePromptOptions,
+    onChunk: (chunk: string) => void,
+  ): Promise<{ output: string; tokensUsed: number; durationMs: number }> {
+    const startTime = Date.now();
+    this.writePromptFile(options.personaId, options.featureId, prompt);
+    const mode = this.resolveExecutionMode();
+
+    if (mode === 'simulation') {
+      const output = this.generateSimulationOutput(options);
+      onChunk(output);
+      return {
+        output,
+        tokensUsed: this.estimateTokens(prompt),
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    try {
+      const output = await this.invokeClaudeCLIStreaming(prompt, options, onChunk);
+      return {
+        output,
+        tokensUsed: this.estimateTokens(prompt + output),
+        durationMs: Date.now() - startTime,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Claude CLI streaming failed: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  private async invokeClaudeCLIStreaming(
+    prompt: string,
+    options: ExecutePromptOptions,
+    onChunk: (chunk: string) => void,
+  ): Promise<string> {
+    const claudeBin = this.options.claudePath ?? 'claude';
+    const timeoutMs = (this.options.timeout ?? 600) * 1000;
+
+    logger.info(`Invoking Claude CLI (streaming) for persona ${options.personaId}`);
+
+    const args = ['--print'];
+    if (this.options.model) args.push('--model', this.options.model);
+    if (this.options.maxTokens) args.push('--max-tokens', String(this.options.maxTokens));
+    if (options.allowedTools?.length) args.push('--allowedTools', options.allowedTools.join(','));
+
+    const childEnv: NodeJS.ProcessEnv = { ...process.env };
+    if (this.isNestedClaudeSession()) {
+      delete childEnv.CLAUDECODE;
+      delete childEnv.CLAUDE_CODE_ENTRYPOINT;
+      delete childEnv.CLAUDE_CODE_SSE_PORT;
+    }
+    childEnv.CDM_PERSONA_ID = options.personaId;
+    childEnv.CDM_FEATURE_ID = options.featureId;
+    if (options.step) childEnv.CDM_EXECUTION_STEP = options.step;
+
+    return new Promise<string>((resolve, reject) => {
+      const proc = spawn(claudeBin, args, {
+        cwd: this.options.projectPath,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
+        timeout: timeoutMs,
+        env: childEnv,
+      });
+
+      proc.stdin.write(prompt, 'utf-8');
+      proc.stdin.end();
+
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        stdout += chunk;
+        onChunk(chunk);
+      });
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      proc.on('error', (err) => {
+        reject(new Error(`Failed to launch Claude CLI: ${err.message}`));
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          reject(new Error(`Claude CLI exited with code ${code}: ${stderr.slice(0, 500) || 'no stderr'}`));
+        }
+      });
+    });
+  }
+
   resolveExecutionMode(): ExecutionMode {
     if (this.executionMode === 'simulation') return 'simulation';
     return this.isClaudeAvailable() ? 'claude-cli' : 'simulation';
