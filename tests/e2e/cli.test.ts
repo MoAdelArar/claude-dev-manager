@@ -7,6 +7,44 @@ import * as os from 'node:os';
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const CLI_SOURCE = path.join(PROJECT_ROOT, 'src', 'cli', 'index.tsx');
 
+const MOCK_PERSONA_CATALOG = {
+  version: '1.0.0',
+  sourceRepo: 'test/mock-personas',
+  sourceCommit: 'abc123',
+  generatedAt: new Date().toISOString(),
+  divisions: ['engineering', 'testing'],
+  personas: [
+    {
+      id: 'engineering-backend-developer',
+      division: 'engineering',
+      filePath: 'engineering/backend-developer.md',
+      frontmatter: {
+        name: 'Backend Developer',
+        emoji: '⚙️',
+        description: 'A test backend developer persona',
+        tagline: 'Builds APIs and services',
+      },
+      tags: ['backend', 'api', 'nodejs', 'typescript', 'express', 'engineering'],
+      contentPreview: 'You are Backend Developer, a skilled backend engineer...',
+      fullContent: '# Backend Developer\n\nYou are Backend Developer, a skilled backend engineer who builds robust APIs and services.',
+    },
+    {
+      id: 'testing-qa-engineer',
+      division: 'testing',
+      filePath: 'testing/qa-engineer.md',
+      frontmatter: {
+        name: 'QA Engineer',
+        emoji: '🧪',
+        description: 'A test QA engineer persona',
+        tagline: 'Ensures quality',
+      },
+      tags: ['testing', 'qa', 'quality', 'test'],
+      contentPreview: 'You are QA Engineer, a meticulous quality assurance specialist...',
+      fullContent: '# QA Engineer\n\nYou are QA Engineer, a meticulous quality assurance specialist.',
+    },
+  ],
+};
+
 function createTempProject(name = 'test-project'): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cdm-e2e-'));
   fs.writeFileSync(
@@ -21,6 +59,69 @@ function createTempProject(name = 'test-project'): string {
   );
   fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}', 'utf-8');
   return dir;
+}
+
+function setupMockCdmProject(projectDir: string): void {
+  const cdmDir = path.join(projectDir, '.cdm');
+  const personasDir = path.join(cdmDir, 'personas');
+  const analysisDir = path.join(cdmDir, 'analysis');
+  
+  fs.mkdirSync(personasDir, { recursive: true });
+  fs.mkdirSync(analysisDir, { recursive: true });
+  fs.mkdirSync(path.join(cdmDir, 'features'), { recursive: true });
+  fs.mkdirSync(path.join(cdmDir, 'artifacts'), { recursive: true });
+  
+  fs.writeFileSync(
+    path.join(personasDir, 'catalog-index.json'),
+    JSON.stringify(MOCK_PERSONA_CATALOG, null, 2),
+    'utf-8',
+  );
+  
+  fs.writeFileSync(
+    path.join(cdmDir, 'project.json'),
+    JSON.stringify({
+      name: path.basename(projectDir),
+      config: { language: 'typescript', framework: 'express' },
+    }),
+    'utf-8',
+  );
+  
+  fs.writeFileSync(
+    path.join(analysisDir, 'overview.md'),
+    '# Project Overview\nTest project',
+    'utf-8',
+  );
+  
+  fs.writeFileSync(
+    path.join(analysisDir, 'codestyle.md'),
+    '# Code Style\nStandard style',
+    'utf-8',
+  );
+  
+  fs.writeFileSync(
+    path.join(projectDir, 'cdm.config.yaml'),
+    `project:
+  language: typescript
+  framework: express
+execution:
+  mode: dynamic
+  reviewPass: auto
+  maxRetries: 2
+  timeoutMinutes: 120
+  defaultMode: claude-cli
+personas:
+  source: github
+  repo: test/mock-personas
+  autoResolve: true
+`,
+    'utf-8',
+  );
+  
+  fs.writeFileSync(
+    path.join(projectDir, 'CLAUDE.md'),
+    '# Claude Dev Manager\nTest project instructions',
+    'utf-8',
+  );
 }
 
 function cdm(args: string, projectDir: string): string {
@@ -141,6 +242,10 @@ describe('CDM CLI — End-to-End', () => {
   });
 
   describe('cdm start --dry-run', () => {
+    beforeEach(() => {
+      setupMockCdmProject(projectDir);
+    });
+
     it('should display execution plan without executing', () => {
       const out = cdm(`start "Add user authentication" --dry-run --project "${projectDir}"`, projectDir);
       expect(out).toContain('DRY RUN');
@@ -157,6 +262,10 @@ describe('CDM CLI — End-to-End', () => {
   });
 
   describe('cdm start (simulation mode)', () => {
+    beforeEach(() => {
+      setupMockCdmProject(projectDir);
+    });
+
     it('should run the full execution in simulation mode', () => {
       const out = cdm(
         `start "Add user login" --mode simulation --no-interactive --project "${projectDir}"`,
@@ -228,6 +337,7 @@ describe('CDM CLI — End-to-End', () => {
     });
 
     it('should display features after an execution', () => {
+      setupMockCdmProject(projectDir);
       cdm(
         `start "Dashboard feature" --mode simulation --no-interactive --project "${projectDir}"`,
         projectDir,
@@ -243,6 +353,7 @@ describe('CDM CLI — End-to-End', () => {
 
   describe('cdm show', () => {
     it('should show feature details by ID', () => {
+      setupMockCdmProject(projectDir);
       cdm(
         `start "Show test" --mode simulation --no-interactive --project "${projectDir}"`,
         projectDir,
@@ -274,6 +385,7 @@ describe('CDM CLI — End-to-End', () => {
 
   describe('multiple features', () => {
     it('should track multiple features independently', () => {
+      setupMockCdmProject(projectDir);
       cdm(
         `start "Feature A" --mode simulation --no-interactive --project "${projectDir}"`,
         projectDir,
